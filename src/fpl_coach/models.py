@@ -1,0 +1,47 @@
+from pydantic import BaseModel
+
+
+class Player(BaseModel):
+    id: int
+    name: str
+    position: str
+    club: str
+    price: float
+    # Issue 03: populated by real FPL API ingestion; absent for manually seeded rows.
+    ownership: float | None = None
+    form: float | None = None
+    status: str | None = None
+    news: str | None = None
+    # Issue 05: Understat xG/xA, matched in by name; NULL when unmatched or
+    # not yet ingested.
+    xg: float | None = None
+    xa: float | None = None
+
+
+class Team(BaseModel):
+    id: int
+    name: str
+    players: list[Player]
+
+
+class PlayerComparison(BaseModel):
+    players: list[Player]
+
+
+class RecommendationPick(BaseModel):
+    player_id: int
+    player_name: str
+
+
+class Alternative(BaseModel):
+    player_id: int
+    player_name: str
+    reason: str
+
+
+class Recommendation(BaseModel):
+    pick: RecommendationPick
+    confidence: float
+    evidence: list[str]
+    risks: list[str]
+    alternative: Alternative
