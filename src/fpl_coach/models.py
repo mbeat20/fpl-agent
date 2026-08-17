@@ -28,6 +28,23 @@ class PlayerComparison(BaseModel):
     players: list[Player]
 
 
+class PlayerRisk(BaseModel):
+    player_id: int
+    player_name: str
+    status: str | None = None
+    news: str | None = None
+    # Issue 07: the club's next ingested fixture, null if none is scheduled
+    # (a blank gameweek) or the club has no ingested fixtures at all.
+    next_opponent: str | None = None
+    next_fixture_difficulty: int | None = None
+    injury_risk: bool
+    fixture_risk: bool
+
+
+class SquadRiskSummary(BaseModel):
+    players: list[PlayerRisk]
+
+
 class RecommendationPick(BaseModel):
     player_id: int
     player_name: str

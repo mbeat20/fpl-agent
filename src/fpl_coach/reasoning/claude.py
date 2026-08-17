@@ -14,7 +14,7 @@ from fpl_coach.models import (
 )
 from fpl_coach.reasoning.base import ToolSpec
 
-_MAX_TURNS = 6
+_MAX_TURNS = 10
 
 
 class ClaudeReasoning:
@@ -55,8 +55,8 @@ class ClaudeReasoning:
             response = self._client.messages.create(
                 model=self._model,
                 max_tokens=1024,
-                temperature=0,
                 tools=anthropic_tools + [self._build_submit_tool(known_players)],
+                tool_choice={"type": "any"},
                 messages=messages,
                 **system_kwargs,
             )

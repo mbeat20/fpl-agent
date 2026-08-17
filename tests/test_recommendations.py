@@ -66,6 +66,33 @@ class _WorthBuyingSpyReasoning:
         )
 
 
+class _InjuryNewsSpyReasoning:
+    """Verifies plumbing only: that get_injury_news is reachable through
+    /recommendations and its whole-squad output can populate a
+    Recommendation's risks list. Does NOT verify the issue-07 acceptance
+    criterion itself — that Claude actually chooses to call get_injury_news
+    and summarize the whole squad for "what are the risks this week?" —
+    which requires the real Reasoning implementation. See
+    test_recommendations_integration.py for that."""
+
+    def reason(self, prompt, tools, system=""):
+        get_injury_news = next(t for t in tools if t.name == "get_injury_news")
+        summary = get_injury_news.handler()
+        first, second = summary.players[0], summary.players[1]
+        return Recommendation(
+            pick=RecommendationPick(player_id=first.player_id, player_name=first.player_name),
+            confidence=0.5,
+            evidence=["spy evidence"],
+            risks=[
+                f"{p.player_name}: injury_risk={p.injury_risk}, fixture_risk={p.fixture_risk}"
+                for p in summary.players
+            ],
+            alternative=Alternative(
+                player_id=second.player_id, player_name=second.player_name, reason="spy alternative"
+            ),
+        )
+
+
 class _SpyReasoning:
     """Captures the system prompt it was called with, for plumbing assertions."""
 
@@ -154,6 +181,23 @@ def test_repeated_calls_return_the_identical_primary_pick(client, seeded_team):
     second = client.post("/recommendations", json={"question": "Who should I captain?"}).json()
 
     assert first["pick"] == second["pick"]
+
+
+def test_injury_news_wiring_reaches_the_whole_squad(seeded_team):
+    app.dependency_overrides[get_reasoning] = lambda: _InjuryNewsSpyReasoning()
+    try:
+        with TestClient(app) as test_client:
+            response = test_client.post(
+                "/recommendations", json={"question": "What are the risks this week?"}
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    seeded_names = {"Mohamed Salah", "Erling Haaland", "Bukayo Saka"}
+    mentioned = {name for risk in body["risks"] for name in seeded_names if name in risk}
+    assert mentioned == seeded_names
 
 
 def test_worth_buying_wiring_reaches_get_player_for_a_non_squad_player(

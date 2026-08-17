@@ -16,7 +16,12 @@ from psycopg.rows import dict_row
 from fpl_coach.app import app
 from fpl_coach.preferences import build_system_prompt, load_preferences
 from fpl_coach.reasoning import ClaudeReasoning
-from fpl_coach.tools import make_compare_players_tool, make_get_my_team_tool, make_get_player_tool
+from fpl_coach.tools import (
+    make_compare_players_tool,
+    make_get_injury_news_tool,
+    make_get_my_team_tool,
+    make_get_player_tool,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -113,6 +118,45 @@ def test_claude_looks_up_and_cites_stats_for_a_player_outside_the_squad(
         "xg" in item.lower() or "xa" in item.lower() or "9.4" in item or "4.1" in item
         for item in recommendation.evidence
     )
+
+
+@pytest.fixture
+def squad_with_an_injury(seeded_team):
+    """Marks one seeded squad player as doubtful — issue 07's target signal
+    for "what are the risks this week?" to surface."""
+    with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
+        conn.execute(
+            "UPDATE players SET status = %s, news = %s "
+            "WHERE team_id = %s AND name = 'Erling Haaland'",
+            ("d", "Knock - 75% chance of playing", seeded_team),
+        )
+        conn.commit()
+    yield seeded_team
+
+
+def test_claude_summarizes_risk_across_the_whole_squad_not_just_one_player(
+    squad_with_an_injury,
+):
+    """Issue 07's actual acceptance criterion: "what are the risks this
+    week?" must produce a Recommendation whose risks cover the whole squad
+    (multiple players), not only the one doubtful player."""
+    with psycopg.connect(os.environ["DATABASE_URL"], row_factory=dict_row) as conn:
+        tools = [
+            make_get_my_team_tool(conn, squad_with_an_injury),
+            make_get_injury_news_tool(conn, squad_with_an_injury),
+        ]
+        recommendation = ClaudeReasoning().reason(
+            "What are the risks this week? Summarize risk for my whole squad, "
+            "not just one player.",
+            tools,
+        )
+
+    seeded_last_names = {"Salah", "Haaland", "Saka"}
+    mentioned = {
+        name for risk in recommendation.risks for name in seeded_last_names if name in risk
+    }
+    assert len(mentioned) >= 2, recommendation.risks
+    assert any("Haaland" in risk for risk in recommendation.risks)
 
 
 def test_endpoint_repeated_calls_return_the_identical_pick_with_real_claude(seeded_team):
