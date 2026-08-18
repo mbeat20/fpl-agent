@@ -31,6 +31,9 @@ BOOTSTRAP = {
             "form": "6.5",
             "status": "a",
             "news": "",
+            "transfers_in_event": 5000,
+            "transfers_out_event": 1000,
+            "cost_change_event": 0,
         },
         {
             "id": 102,
@@ -44,6 +47,9 @@ BOOTSTRAP = {
             "form": "8.2",
             "status": "d",
             "news": "Knock - 75% chance of playing",
+            "transfers_in_event": 500,
+            "transfers_out_event": 8000,
+            "cost_change_event": -1,
         },
         {
             "id": 103,
@@ -57,6 +63,9 @@ BOOTSTRAP = {
             "form": "5.1",
             "status": "a",
             "news": "",
+            "transfers_in_event": 0,
+            "transfers_out_event": 0,
+            "cost_change_event": 0,
         },
     ],
     "teams": [
@@ -201,8 +210,8 @@ def test_run_ingestion_writes_correctly_shaped_rows():
 
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, name, full_name, xg, xa FROM fpl_players "
-                "WHERE id = ANY(%s) ORDER BY id",
+                "SELECT id, name, full_name, xg, xa, transfers_in_event, transfers_out_event, "
+                "cost_change_event FROM fpl_players WHERE id = ANY(%s) ORDER BY id",
                 (list(TEST_ELEMENT_IDS),),
             )
             pool = {row["name"]: row for row in cur.fetchall()}
@@ -214,6 +223,10 @@ def test_run_ingestion_writes_correctly_shaped_rows():
         assert float(pool["Haaland"]["xg"]) == 28.8
         assert pool["Saka"]["xg"] is None
         assert pool["Saka"]["xa"] is None
+
+        assert pool["Salah"]["transfers_in_event"] == 5000
+        assert pool["Salah"]["transfers_out_event"] == 1000
+        assert pool["Haaland"]["cost_change_event"] == -1
 
         team = get_my_team(conn, TEST_TEAM_ID)
         assert team.name == "Ingested Team"

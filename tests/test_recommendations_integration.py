@@ -21,6 +21,7 @@ from fpl_coach.tools import (
     make_get_injury_news_tool,
     make_get_my_team_tool,
     make_get_player_tool,
+    make_predict_price_changes_tool,
 )
 
 pytestmark = pytest.mark.integration
@@ -166,3 +167,50 @@ def test_endpoint_repeated_calls_return_the_identical_pick_with_real_claude(seed
 
     assert first.status_code == second.status_code == 200
     assert first.json()["pick"] == second.json()["pick"]
+
+
+PRICE_RISER_IDS = (981, 982)
+
+
+@pytest.fixture
+def pool_with_a_clear_price_riser():
+    """Issue 08's target signal — a low-ownership pool player with a strong
+    positive net-transfer count, distinct enough from a flat/no-movement
+    player that a real Claude call should flag it as a riser and not the
+    other one."""
+    with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
+        conn.execute("DELETE FROM fpl_players WHERE id = ANY(%s)", (list(PRICE_RISER_IDS),))
+        with conn.cursor() as cur:
+            cur.executemany(
+                "INSERT INTO fpl_players "
+                "(id, name, full_name, position, club, price, ownership, "
+                " transfers_in_event, transfers_out_event, cost_change_event) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                [
+                    (981, "Ramsdale", "Aaron Ramsdale", "GK", "Southampton", 4.5, 3.0, 15000, 200, 0),
+                    (982, "Flat", "No Movement Player", "MID", "Wolves", 5.5, 8.0, 300, 300, 0),
+                ],
+            )
+        conn.commit()
+    yield PRICE_RISER_IDS
+    with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
+        conn.execute("DELETE FROM fpl_players WHERE id = ANY(%s)", (list(PRICE_RISER_IDS),))
+
+
+def test_claude_flags_the_price_riser_with_evidence(seeded_team, pool_with_a_clear_price_riser):
+    """Issue 08's actual acceptance criterion: "which players are expected
+    to rise?" must make Claude call predict_price_changes and surface the
+    flagged player with the net-transfer evidence behind the call, not just
+    pick an arbitrary squad player. Exercises _record_known_players widening
+    submit_recommendation's id enum for PriceChangePredictions results."""
+    with psycopg.connect(os.environ["DATABASE_URL"], row_factory=dict_row) as conn:
+        tools = [
+            make_get_my_team_tool(conn, seeded_team),
+            make_predict_price_changes_tool(conn),
+        ]
+        recommendation = ClaudeReasoning().reason(
+            "Which players are expected to rise in price? Give me the evidence.", tools
+        )
+
+    assert recommendation.pick.player_id == 981
+    assert any("transfer" in item.lower() for item in recommendation.evidence)

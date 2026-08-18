@@ -85,3 +85,18 @@ class CreatorOpinions(BaseModel):
     # weigh more heavily in the synthesis a Reasoning implementation builds
     # from this.
     stances: list[CreatorStanceView]
+
+
+class PricePrediction(BaseModel):
+    player_id: int
+    player_name: str
+    direction: str  # "rise" | "fall"
+    ownership: float | None = None
+    net_transfers_event: int
+    evidence: str
+
+
+class PriceChangePredictions(BaseModel):
+    # Issue 08: each list sorted most-likely-first.
+    rising: list[PricePrediction]
+    falling: list[PricePrediction]

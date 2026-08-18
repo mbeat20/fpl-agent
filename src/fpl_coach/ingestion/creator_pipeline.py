@@ -16,15 +16,28 @@ class CreatorIngestionSummary:
 
 
 def run_creator_ingestion(
-    conn: Connection, grok_client: GrokClient, extractor: StanceExtractor
+    conn: Connection,
+    grok_client: GrokClient,
+    extractor: StanceExtractor,
+    creator_ids: list[int] | None = None,
 ) -> CreatorIngestionSummary:
     """Per creator: pulls recent posts via Grok's X Search (issue 06), stores
     each as creator_content (idempotent -- ON CONFLICT DO NOTHING on the
     UNIQUE (creator_id, source_url), since content accumulates across runs
     rather than getting replaced), then runs Layer-2 extraction on each newly
-    -stored piece of content into creator_stances."""
+    -stored piece of content into creator_stances.
+
+    creator_ids optionally scopes the run to specific creators -- omitted
+    (the CLI's usage) processes every creator. Tests pass their own
+    freshly-inserted creator id so a fake grok_client never gets called for
+    real creators already in the (shared) database -- calling it for every
+    creator regardless of scope previously wrote fake test URLs into a real
+    creator's content on every test run."""
     with conn.cursor() as cur:
-        cur.execute("SELECT id, x_handle FROM creators")
+        if creator_ids is None:
+            cur.execute("SELECT id, x_handle FROM creators")
+        else:
+            cur.execute("SELECT id, x_handle FROM creators WHERE id = ANY(%s)", (creator_ids,))
         creators = cur.fetchall()
 
     content_ingested = 0

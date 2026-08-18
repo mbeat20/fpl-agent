@@ -52,7 +52,9 @@ def test_creator():
 
 def test_ingests_content_and_extracts_stances(test_creator):
     with _conn() as conn:
-        summary = run_creator_ingestion(conn, _FakeGrokClient(POSTS), FakeStanceExtractor(STANCES))
+        summary = run_creator_ingestion(
+            conn, _FakeGrokClient(POSTS), FakeStanceExtractor(STANCES), creator_ids=[test_creator]
+        )
 
         with conn.cursor() as cur:
             cur.execute("SELECT count(*) AS n FROM creator_content WHERE creator_id = %s", (test_creator,))
@@ -77,8 +79,8 @@ def test_re_running_ingestion_is_idempotent_and_does_not_duplicate(test_creator)
     extractor = FakeStanceExtractor(STANCES)
 
     with _conn() as conn:
-        run_creator_ingestion(conn, grok_client, extractor)
-        second_summary = run_creator_ingestion(conn, grok_client, extractor)
+        run_creator_ingestion(conn, grok_client, extractor, creator_ids=[test_creator])
+        second_summary = run_creator_ingestion(conn, grok_client, extractor, creator_ids=[test_creator])
 
         with conn.cursor() as cur:
             cur.execute("SELECT count(*) AS n FROM creator_content WHERE creator_id = %s", (test_creator,))
@@ -97,7 +99,9 @@ def test_stances_are_matched_to_an_fpl_player_id_when_a_match_exists(test_creato
     """Best-effort match against fpl_players by name, same convention as
     players.fpl_element_id -- NULL when unmatched (no FK, see schema.sql)."""
     with _conn() as conn:
-        run_creator_ingestion(conn, _FakeGrokClient(POSTS[:1]), FakeStanceExtractor(STANCES))
+        run_creator_ingestion(
+            conn, _FakeGrokClient(POSTS[:1]), FakeStanceExtractor(STANCES), creator_ids=[test_creator]
+        )
 
         with conn.cursor() as cur:
             cur.execute(

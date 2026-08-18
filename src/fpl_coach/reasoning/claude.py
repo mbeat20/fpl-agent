@@ -1,4 +1,5 @@
 import os
+from dataclasses import dataclass
 from typing import Any
 
 import anthropic
@@ -8,6 +9,7 @@ from fpl_coach.models import (
     Alternative,
     Player,
     PlayerComparison,
+    PriceChangePredictions,
     Recommendation,
     RecommendationPick,
     Team,
@@ -15,6 +17,16 @@ from fpl_coach.models import (
 from fpl_coach.reasoning.base import ToolSpec
 
 _MAX_TURNS = 10
+
+
+@dataclass(frozen=True)
+class _KnownPlayer:
+    """Common id/name shape for anything a tool result can make a valid
+    submit_recommendation pick — a full Player, or just a player_id/name
+    pair from a lighter-weight result like PriceChangePredictions."""
+
+    id: int
+    name: str
 
 
 class ClaudeReasoning:
@@ -40,7 +52,9 @@ class ClaudeReasoning:
 
     def reason(self, prompt: str, tools: list[ToolSpec], system: str = "") -> Recommendation:
         get_my_team = next(t for t in tools if t.name == "get_my_team")
-        known_players: dict[int, Player] = {p.id: p for p in get_my_team.handler().players}
+        known_players: dict[int, _KnownPlayer] = {
+            p.id: _KnownPlayer(id=p.id, name=p.name) for p in get_my_team.handler().players
+        }
 
         anthropic_tools = [
             {"name": t.name, "description": t.description, "input_schema": t.input_schema}
@@ -99,23 +113,26 @@ class ClaudeReasoning:
         raise RuntimeError("Claude did not call submit_recommendation within the turn budget")
 
     @staticmethod
-    def _record_known_players(result: Any, known_players: dict[int, Player]) -> None:
+    def _record_known_players(result: Any, known_players: dict[int, _KnownPlayer]) -> None:
         if isinstance(result, Player):
-            known_players[result.id] = result
+            known_players[result.id] = _KnownPlayer(id=result.id, name=result.name)
         elif isinstance(result, (Team, PlayerComparison)):
             for p in result.players:
-                known_players[p.id] = p
+                known_players[p.id] = _KnownPlayer(id=p.id, name=p.name)
+        elif isinstance(result, PriceChangePredictions):
+            for p in result.rising + result.falling:
+                known_players[p.player_id] = _KnownPlayer(id=p.player_id, name=p.player_name)
 
     @staticmethod
-    def _build_submit_tool(known_players: dict[int, Player]) -> dict:
+    def _build_submit_tool(known_players: dict[int, _KnownPlayer]) -> dict:
         player_ids = sorted(known_players)
         return {
             "name": "submit_recommendation",
             "description": (
                 "Finalize the Recommendation for the user's question. Only players "
-                "already returned by get_my_team, get_player, or compare_players in "
-                "this conversation are valid picks — look a player up before "
-                "recommending them."
+                "already returned by get_my_team, get_player, compare_players, or "
+                "predict_price_changes in this conversation are valid picks — look a "
+                "player up before recommending them."
             ),
             "input_schema": {
                 "type": "object",
@@ -144,7 +161,7 @@ class ClaudeReasoning:
 
     @staticmethod
     def _build_recommendation(
-        args: dict[str, Any], known_players: dict[int, Player]
+        args: dict[str, Any], known_players: dict[int, _KnownPlayer]
     ) -> Recommendation:
         pick_player = known_players[args["pick_player_id"]]
         alt_player = known_players[args["alternative_player_id"]]

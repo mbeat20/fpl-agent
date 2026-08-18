@@ -3,6 +3,7 @@ from fpl_coach.tools.get_creator_opinions import get_creator_opinions, make_get_
 from fpl_coach.tools.get_injury_news import get_injury_news, make_get_injury_news_tool
 from fpl_coach.tools.get_my_team import get_my_team, make_get_my_team_tool
 from fpl_coach.tools.get_player import get_player, make_get_player_tool
+from fpl_coach.tools.predict_price_changes import make_predict_price_changes_tool, predict_price_changes
 
 __all__ = [
     "compare_players",
@@ -15,4 +16,6 @@ __all__ = [
     "make_get_injury_news_tool",
     "make_get_my_team_tool",
     "make_get_player_tool",
+    "make_predict_price_changes_tool",
+    "predict_price_changes",
 ]

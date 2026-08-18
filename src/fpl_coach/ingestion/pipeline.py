@@ -159,14 +159,17 @@ def run_ingestion(
                     element["news"] or None,
                     xg_xa[0] if xg_xa else None,
                     xg_xa[1] if xg_xa else None,
+                    element["transfers_in_event"],
+                    element["transfers_out_event"],
+                    element["cost_change_event"],
                 )
             )
         cur.executemany(
             """
             INSERT INTO fpl_players
                 (id, name, full_name, position, club, price, ownership, form, status, news,
-                 xg, xa)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 xg, xa, transfers_in_event, transfers_out_event, cost_change_event)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             pool_rows,
         )

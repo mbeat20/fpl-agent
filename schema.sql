@@ -59,6 +59,13 @@ CREATE TABLE IF NOT EXISTS fpl_players (
     xa NUMERIC(6, 2)
 );
 
+-- Issue 08: net-transfer and price-change signals from the same
+-- bootstrap-static elements, for predict_price_changes. NULL until the next
+-- refresh for rows inserted before this column existed.
+ALTER TABLE fpl_players ADD COLUMN IF NOT EXISTS transfers_in_event INTEGER;
+ALTER TABLE fpl_players ADD COLUMN IF NOT EXISTS transfers_out_event INTEGER;
+ALTER TABLE fpl_players ADD COLUMN IF NOT EXISTS cost_change_event SMALLINT;
+
 -- Issue 06: trusted X creators, manually assigned a trust tier at add-time
 -- (ADR-0001).
 CREATE TABLE IF NOT EXISTS creators (
