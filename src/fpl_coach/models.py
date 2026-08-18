@@ -120,6 +120,32 @@ class PriceChangePredictions(BaseModel):
     falling: list[PricePrediction]
 
 
+class TransferOption(BaseModel):
+    player: Player
+    # Issue 11: reuses get_creator_opinions's exact-name lookup, not a new
+    # query -- same trust-tier-sorted shape.
+    creator_stances: list[CreatorStanceView]
+    next_opponent: str | None = None
+    next_fixture_difficulty: int | None = None
+    injury_risk: bool
+
+
+class TransferComparison(BaseModel):
+    player_out: TransferOption
+    player_in: TransferOption
+    is_hit: bool
+    hit_cost: int  # 4 if is_hit else 0 -- FPL's fixed extra-transfer cost
+    # Issue 11: a *directional* signal (xG + xA + form, units that don't
+    # actually compose into points), not a points projection -- deliberately
+    # not named expected_gain so nothing downstream reads it as one.
+    gain_signal: float
+    net_gain_signal: float  # gain_signal - hit_cost
+    # False when either player is missing xg/xa/form -- gain_signal silently
+    # reads as 0.0 in that case, which must not be read as "no gain",
+    # especially pre-season when this is the common case.
+    data_complete: bool
+
+
 class Instinct(BaseModel):
     text: str
     logged_at: str

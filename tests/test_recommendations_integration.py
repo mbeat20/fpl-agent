@@ -24,6 +24,7 @@ from fpl_coach.tools import (
     make_get_my_team_tool,
     make_get_player_tool,
     make_predict_price_changes_tool,
+    make_recommend_transfers_tool,
     make_search_creator_opinions_tool,
 )
 
@@ -343,3 +344,99 @@ def test_claude_uses_semantic_search_for_a_query_with_no_exact_player_name(
 
     combined = " ".join(recommendation.evidence + recommendation.risks)
     assert "SEARCHTEST:" in combined
+
+
+TRANSFER_CANDIDATE_IDS = (971, 972)
+
+
+@pytest.fixture
+def transfer_candidates():
+    """Issue 11: a clearly weak player and a clearly strong one, distinct
+    enough that recommend_transfers's gain_signal should point unambiguously
+    one way -- same "obvious winner" shape as issue 08's price-riser fixture
+    above, so real Claude's pick is reproducible rather than a coin flip."""
+    with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
+        conn.execute("DELETE FROM fpl_players WHERE id = ANY(%s)", (list(TRANSFER_CANDIDATE_IDS),))
+        with conn.cursor() as cur:
+            cur.executemany(
+                "INSERT INTO fpl_players "
+                "(id, name, full_name, position, club, price, ownership, form, status, "
+                " news, xg, xa) "
+                "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                [
+                    (
+                        971, "Weak Player", "Transfer Weak Candidate", "MID", "Test Town",
+                        5.0, 5.0, 1.0, "a", None, 0.5, 0.2,
+                    ),
+                    (
+                        972, "Strong Player", "Transfer Strong Candidate", "FWD", "Test City",
+                        9.0, 15.0, 6.0, "a", None, 8.0, 4.0,
+                    ),
+                ],
+            )
+        conn.commit()
+    yield TRANSFER_CANDIDATE_IDS
+    with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
+        conn.execute("DELETE FROM fpl_players WHERE id = ANY(%s)", (list(TRANSFER_CANDIDATE_IDS),))
+
+
+def test_recommend_transfers_is_the_only_way_to_reach_a_player_it_surfaces(
+    seeded_team, transfer_candidates
+):
+    """Exercises _record_known_players widening submit_recommendation's id
+    enum for TransferComparison results -- deliberately excludes get_player/
+    compare_players from the tools list so Strong Player (972) is reachable
+    ONLY through recommend_transfers. Without the _record_known_players
+    branch, Claude could never submit 972 as a pick (issue 08's known-
+    players gap, memory-documented)."""
+    with psycopg.connect(os.environ["DATABASE_URL"], row_factory=dict_row) as conn:
+        tools = [
+            make_get_my_team_tool(conn, seeded_team),
+            make_recommend_transfers_tool(conn),
+        ]
+        recommendation = ClaudeReasoning().reason(
+            "Should I transfer Weak Player for Strong Player? Assume it's a free transfer.",
+            tools,
+        )
+
+    assert 972 in (recommendation.pick.player_id, recommendation.alternative.player_id)
+
+
+def test_claude_pushes_back_on_a_transfer_the_data_does_not_support(
+    seeded_team, transfer_candidates
+):
+    """Issue 11's actual acceptance criterion: given a transfer the evidence
+    doesn't support (a hit, trading the strong player for the weak one),
+    Claude must push back citing that evidence rather than agreeing."""
+    with psycopg.connect(os.environ["DATABASE_URL"], row_factory=dict_row) as conn:
+        tools = [
+            make_get_my_team_tool(conn, seeded_team),
+            make_recommend_transfers_tool(conn),
+        ]
+        recommendation = ClaudeReasoning().reason(
+            "I'm thinking of transferring Strong Player for Weak Player, and it would cost "
+            "me a hit. Talk me out of it if the data doesn't support it.",
+            tools,
+        )
+
+    combined = " ".join(recommendation.evidence + recommendation.risks)
+    assert "PUSHBACK:" in combined
+    assert recommendation.pick.player_id == 972  # keep Strong Player -- don't make the move
+
+
+def test_endpoint_repeated_calls_return_the_identical_transfer_pick(
+    seeded_team, transfer_candidates
+):
+    """ADR-0004: the primary pick for a transfer question must be
+    deterministic across repeated calls, same as the existing captain-pick
+    determinism test above."""
+    with TestClient(app) as client:
+        question = {
+            "question": "Should I transfer Weak Player for Strong Player? Assume it's a "
+            "free transfer."
+        }
+        first = client.post("/recommendations", json=question)
+        second = client.post("/recommendations", json=question)
+
+    assert first.status_code == second.status_code == 200
+    assert first.json()["pick"] == second.json()["pick"]

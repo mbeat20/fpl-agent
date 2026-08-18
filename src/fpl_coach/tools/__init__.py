@@ -5,6 +5,7 @@ from fpl_coach.tools.get_instincts import get_instincts, make_get_instincts_tool
 from fpl_coach.tools.get_my_team import get_my_team, make_get_my_team_tool
 from fpl_coach.tools.get_player import get_player, make_get_player_tool
 from fpl_coach.tools.predict_price_changes import make_predict_price_changes_tool, predict_price_changes
+from fpl_coach.tools.recommend_transfers import make_recommend_transfers_tool, recommend_transfers
 from fpl_coach.tools.search_creator_opinions import (
     make_search_creator_opinions_tool,
     search_creator_opinions,
@@ -24,7 +25,9 @@ __all__ = [
     "make_get_my_team_tool",
     "make_get_player_tool",
     "make_predict_price_changes_tool",
+    "make_recommend_transfers_tool",
     "make_search_creator_opinions_tool",
     "predict_price_changes",
+    "recommend_transfers",
     "search_creator_opinions",
 ]

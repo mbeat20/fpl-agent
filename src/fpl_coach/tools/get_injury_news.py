@@ -1,26 +1,11 @@
 from psycopg import Connection
 
+from fpl_coach.fixtures import next_fixture_by_club
 from fpl_coach.models import PlayerRisk, SquadRiskSummary
 from fpl_coach.reasoning.base import ToolSpec
 
 _INJURY_STATUSES = {"d", "i", "s", "u"}  # doubtful, injured, suspended, unavailable
 _HIGH_DIFFICULTY = 4  # FPL's own 1-5 FDR scale; 4-5 is a tough fixture
-
-_NEXT_FIXTURE_SQL = """
-WITH next_fixtures AS (
-    SELECT home_team AS club, away_team AS opponent, home_difficulty AS difficulty,
-           kickoff_time
-    FROM fixtures
-    UNION ALL
-    SELECT away_team AS club, home_team AS opponent, away_difficulty AS difficulty,
-           kickoff_time
-    FROM fixtures
-)
-SELECT DISTINCT ON (club) club, opponent, difficulty
-FROM next_fixtures
-WHERE kickoff_time > now()
-ORDER BY club, kickoff_time
-"""
 
 
 def get_injury_news(conn: Connection, team_id: int) -> SquadRiskSummary:
@@ -32,12 +17,11 @@ def get_injury_news(conn: Connection, team_id: int) -> SquadRiskSummary:
         )
         squad = cur.fetchall()
 
-        cur.execute(_NEXT_FIXTURE_SQL)
-        next_fixture_by_club = {row["club"]: row for row in cur.fetchall()}
+    fixtures_by_club = next_fixture_by_club(conn)
 
     players = []
     for row in squad:
-        fixture = next_fixture_by_club.get(row["club"])
+        fixture = fixtures_by_club.get(row["club"])
         difficulty = fixture["difficulty"] if fixture else None
         players.append(
             PlayerRisk(

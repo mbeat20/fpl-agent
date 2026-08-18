@@ -23,6 +23,7 @@ from fpl_coach.tools import (
     make_get_my_team_tool,
     make_get_player_tool,
     make_predict_price_changes_tool,
+    make_recommend_transfers_tool,
     make_search_creator_opinions_tool,
 )
 
@@ -69,6 +70,7 @@ def ask(
             make_predict_price_changes_tool(conn),
             make_get_instincts_tool(conn, MY_TEAM_ID),
             make_search_creator_opinions_tool(conn, VoyageClient()),
+            make_recommend_transfers_tool(conn),
         ]
         system = build_system_prompt(load_preferences())
         recommendation = reasoning.reason(request.question, tools, system=system)

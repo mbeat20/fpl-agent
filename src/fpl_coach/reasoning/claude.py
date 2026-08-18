@@ -13,6 +13,7 @@ from fpl_coach.models import (
     Recommendation,
     RecommendationPick,
     Team,
+    TransferComparison,
 )
 from fpl_coach.reasoning.base import ToolSpec
 
@@ -122,6 +123,11 @@ class ClaudeReasoning:
         elif isinstance(result, PriceChangePredictions):
             for p in result.rising + result.falling:
                 known_players[p.player_id] = _KnownPlayer(id=p.player_id, name=p.player_name)
+        elif isinstance(result, TransferComparison):
+            for option in (result.player_out, result.player_in):
+                known_players[option.player.id] = _KnownPlayer(
+                    id=option.player.id, name=option.player.name
+                )
 
     @staticmethod
     def _build_submit_tool(known_players: dict[int, _KnownPlayer]) -> dict:
