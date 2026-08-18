@@ -6,6 +6,7 @@ from psycopg.rows import dict_row
 
 from fpl_coach.ingestion.creator_pipeline import run_creator_ingestion
 from fpl_coach.ingestion.extraction import FakeStanceExtractor
+from fpl_coach.ingestion.voyage_client import EMBEDDING_DIMENSION
 
 TEST_HANDLE = "pipeline_test_creator"
 
@@ -27,6 +28,19 @@ class _FakeGrokClient:
     def search_creator_posts(self, x_handle: str, limit: int = 5) -> list[dict]:
         self.calls.append(x_handle)
         return self._posts
+
+
+class _FakeVoyageClient:
+    """Fakes at the same seam as _FakeGrokClient/FakeStanceExtractor --
+    deterministic vectors (index-based, not random) so embedding call counts
+    and content_chunks row counts are provable without a real API call."""
+
+    def __init__(self) -> None:
+        self.calls: list[list[str]] = []
+
+    def embed(self, texts: list[str]) -> list[list[float]]:
+        self.calls.append(texts)
+        return [[float(i % 7) / 7] * EMBEDDING_DIMENSION for i in range(len(texts))]
 
 
 def _conn():
@@ -53,7 +67,11 @@ def test_creator():
 def test_ingests_content_and_extracts_stances(test_creator):
     with _conn() as conn:
         summary = run_creator_ingestion(
-            conn, _FakeGrokClient(POSTS), FakeStanceExtractor(STANCES), creator_ids=[test_creator]
+            conn,
+            _FakeGrokClient(POSTS),
+            FakeStanceExtractor(STANCES),
+            _FakeVoyageClient(),
+            creator_ids=[test_creator],
         )
 
         with conn.cursor() as cur:
@@ -61,6 +79,13 @@ def test_ingests_content_and_extracts_stances(test_creator):
             content_count = cur.fetchone()["n"]
             cur.execute("SELECT count(*) AS n FROM creator_stances WHERE creator_id = %s", (test_creator,))
             stance_count = cur.fetchone()["n"]
+            cur.execute(
+                "SELECT count(*) AS n FROM content_chunks ch "
+                "JOIN creator_content cc ON cc.id = ch.content_id "
+                "WHERE cc.creator_id = %s",
+                (test_creator,),
+            )
+            chunk_count = cur.fetchone()["n"]
 
     assert summary.creators_processed == 1
     assert summary.content_ingested == 2
@@ -69,30 +94,47 @@ def test_ingests_content_and_extracts_stances(test_creator):
     assert summary.stances_extracted == 2
     assert content_count == 2
     assert stance_count == 2
+    # One chunk per post -- Grok's paraphrases are short, well under _MAX_CHUNK_CHARS.
+    assert summary.chunks_embedded == 2
+    assert chunk_count == 2
 
 
 def test_re_running_ingestion_is_idempotent_and_does_not_duplicate(test_creator):
     """Pitfall #2 (ticket 06 design notes): creator content accumulates
     rather than getting replaced, so a naive re-run must not duplicate
-    content or re-extract stances for posts already seen."""
+    content or re-extract stances for posts already seen. Embedding is
+    driven off content lacking chunks (issue 06 criterion 4), so it must
+    stay idempotent the same way."""
     grok_client = _FakeGrokClient(POSTS)
     extractor = FakeStanceExtractor(STANCES)
+    voyage_client = _FakeVoyageClient()
 
     with _conn() as conn:
-        run_creator_ingestion(conn, grok_client, extractor, creator_ids=[test_creator])
-        second_summary = run_creator_ingestion(conn, grok_client, extractor, creator_ids=[test_creator])
+        run_creator_ingestion(conn, grok_client, extractor, voyage_client, creator_ids=[test_creator])
+        second_summary = run_creator_ingestion(
+            conn, grok_client, extractor, voyage_client, creator_ids=[test_creator]
+        )
 
         with conn.cursor() as cur:
             cur.execute("SELECT count(*) AS n FROM creator_content WHERE creator_id = %s", (test_creator,))
             content_count = cur.fetchone()["n"]
             cur.execute("SELECT count(*) AS n FROM creator_stances WHERE creator_id = %s", (test_creator,))
             stance_count = cur.fetchone()["n"]
+            cur.execute(
+                "SELECT count(*) AS n FROM content_chunks ch "
+                "JOIN creator_content cc ON cc.id = ch.content_id "
+                "WHERE cc.creator_id = %s",
+                (test_creator,),
+            )
+            chunk_count = cur.fetchone()["n"]
 
     assert second_summary.content_ingested == 0
     assert second_summary.content_skipped == 2
     assert second_summary.stances_extracted == 0
+    assert second_summary.chunks_embedded == 0
     assert content_count == 2  # not 4
     assert stance_count == 2  # not 4
+    assert chunk_count == 2  # not 4
 
 
 def test_stances_are_matched_to_an_fpl_player_id_when_a_match_exists(test_creator):
@@ -100,7 +142,11 @@ def test_stances_are_matched_to_an_fpl_player_id_when_a_match_exists(test_creato
     players.fpl_element_id -- NULL when unmatched (no FK, see schema.sql)."""
     with _conn() as conn:
         run_creator_ingestion(
-            conn, _FakeGrokClient(POSTS[:1]), FakeStanceExtractor(STANCES), creator_ids=[test_creator]
+            conn,
+            _FakeGrokClient(POSTS[:1]),
+            FakeStanceExtractor(STANCES),
+            _FakeVoyageClient(),
+            creator_ids=[test_creator],
         )
 
         with conn.cursor() as cur:

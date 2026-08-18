@@ -12,6 +12,7 @@ from fpl_coach.ingestion.fpl_client import FPLClient
 from fpl_coach.ingestion.grok_client import GrokClient
 from fpl_coach.ingestion.pipeline import run_ingestion
 from fpl_coach.ingestion.understat_client import UnderstatClient
+from fpl_coach.ingestion.voyage_client import VoyageClient
 
 
 def main() -> None:
@@ -51,14 +52,16 @@ def ingest_creators_main() -> None:
     load_dotenv()
     grok_client = GrokClient()
     extractor = ClaudeStanceExtractor()
+    voyage_client = VoyageClient()
     with get_connection() as conn:
-        summary = run_creator_ingestion(conn, grok_client, extractor)
+        summary = run_creator_ingestion(conn, grok_client, extractor, voyage_client)
 
     print(
         f"Processed {summary.creators_processed} creators: "
         f"{summary.content_ingested} new posts ingested, "
         f"{summary.content_skipped} already-seen posts skipped, "
-        f"{summary.stances_extracted} stances extracted."
+        f"{summary.stances_extracted} stances extracted, "
+        f"{summary.chunks_embedded} chunks embedded."
     )
 
 

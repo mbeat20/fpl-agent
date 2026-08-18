@@ -87,6 +87,24 @@ class CreatorOpinions(BaseModel):
     stances: list[CreatorStanceView]
 
 
+class SemanticCreatorMatch(BaseModel):
+    # Issue 09: a pgvector nearest-neighbour hit, resolved back to its
+    # Creator Stance's structured fields (ADR-0005) -- not just raw text.
+    creator_name: str
+    trust_tier: str
+    stance: str
+    confidence: float
+    reason: str
+    matched_text: str
+
+
+class SemanticCreatorOpinions(BaseModel):
+    query: str
+    # Issue 09: ordered by embedding similarity (closest first), unlike
+    # CreatorOpinions above which sorts by trust tier.
+    matches: list[SemanticCreatorMatch]
+
+
 class PricePrediction(BaseModel):
     player_id: int
     player_name: str

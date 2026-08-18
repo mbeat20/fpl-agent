@@ -93,10 +93,9 @@ CREATE TABLE IF NOT EXISTS creator_content (
 );
 
 -- Issue 06: structured Creator Stances extracted (Layer 2, an LLM step) from
--- creator_content -- one piece of content may yield multiple Stances.
--- Embedding creator_content into pgvector (ADR-0005, ticket 09's semantic
--- search) is deferred until VOYAGE_API_KEY is available; this table only
--- covers the structured half.
+-- creator_content -- one piece of content may yield multiple Stances. The
+-- vector half of ADR-0005 (embedding creator_content's source text) lives
+-- separately in content_chunks below.
 -- fpl_player_id deliberately has no FK: ingestion/pipeline.py does
 -- `DELETE FROM fpl_players` wholesale every refresh, which would block or
 -- cascade-drop this table -- follows players.fpl_element_id's existing
@@ -110,6 +109,26 @@ CREATE TABLE IF NOT EXISTS creator_stances (
     stance TEXT NOT NULL CHECK (stance IN ('buy', 'sell', 'hold', 'captain')),
     confidence NUMERIC(3, 2) NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
     reason TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Issue 06 (criterion 4) / ADR-0005: the vector half of a Creator Stance --
+-- creator_content.content_text chunked and embedded via Voyage AI
+-- (voyage-3, 1024 dims, confirmed live 2026-08-18) so ticket 09's semantic
+-- search can find opinions pgvector similarity, then resolve back through
+-- source_content_id -> creator_content -> creator_stances for the
+-- structured fields (ADR-0005: many-Stances-to-one-source, not 1:1).
+-- ON DELETE CASCADE from creator_content completes the
+-- creators -> creator_content -> content_chunks chain, so existing
+-- test_creator_pipeline.py teardown (DELETE FROM creators ...) cleans this
+-- up too with no new fixture code.
+CREATE EXTENSION IF NOT EXISTS vector;
+
+CREATE TABLE IF NOT EXISTS content_chunks (
+    id SERIAL PRIMARY KEY,
+    content_id INTEGER NOT NULL REFERENCES creator_content(id) ON DELETE CASCADE,
+    chunk_text TEXT NOT NULL,
+    embedding vector(1024) NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

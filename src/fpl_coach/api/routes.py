@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from fpl_coach.db import get_connection
+from fpl_coach.ingestion.voyage_client import VoyageClient
 from fpl_coach.instincts import is_instinct, log_instinct
 from fpl_coach.models import Recommendation
 from fpl_coach.preferences import (
@@ -21,6 +22,7 @@ from fpl_coach.tools import (
     make_get_my_team_tool,
     make_get_player_tool,
     make_predict_price_changes_tool,
+    make_search_creator_opinions_tool,
 )
 
 router = APIRouter()
@@ -65,6 +67,7 @@ def ask(
             make_get_creator_opinions_tool(conn),
             make_predict_price_changes_tool(conn),
             make_get_instincts_tool(conn, MY_TEAM_ID),
+            make_search_creator_opinions_tool(conn, VoyageClient()),
         ]
         system = build_system_prompt(load_preferences())
         return reasoning.reason(request.question, tools, system=system)
