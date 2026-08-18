@@ -112,3 +112,30 @@ CREATE TABLE IF NOT EXISTS creator_stances (
     reason TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Issue 13: one row per team, refreshed by run_ingestion (which already
+-- resolves is_current/is_next from bootstrap-static for the FPL API calls it
+-- makes) -- keyed by team_id (not a global singleton) so a fake ingestion
+-- run in tests (TEST_TEAM_ID) can never clobber the real team's (MY_TEAM_ID)
+-- gameweek, and so ON DELETE CASCADE cleans it up whenever a test's team row
+-- is deleted, same convention as creators -> creator_content.
+CREATE TABLE IF NOT EXISTS gameweek_state (
+    team_id INTEGER PRIMARY KEY REFERENCES teams(id) ON DELETE CASCADE,
+    gameweek INTEGER NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Issue 13: the user's own early-week transfer/captaincy notes (CONTEXT.md's
+-- Instinct), distinct from preferences.md's standing Preferences despite the
+-- shared "remember: X" phrasing. Gameweek-scoped, not carried forward --
+-- reads filter by gameweek_state's current row, and run_ingestion purges
+-- rows left over from a prior gameweek. fpl_player_id-less by design: an
+-- Instinct is the user's own free-text note (e.g. "thinking Rogers to
+-- Enzo"), not a structured pick.
+CREATE TABLE IF NOT EXISTS instincts (
+    id SERIAL PRIMARY KEY,
+    team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    gameweek INTEGER NOT NULL,
+    text TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

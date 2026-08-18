@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from fpl_coach.db import get_connection
+from fpl_coach.instincts import is_instinct, log_instinct
 from fpl_coach.models import Recommendation
 from fpl_coach.preferences import (
     append_preference,
@@ -16,6 +17,7 @@ from fpl_coach.tools import (
     make_compare_players_tool,
     make_get_creator_opinions_tool,
     make_get_injury_news_tool,
+    make_get_instincts_tool,
     make_get_my_team_tool,
     make_get_player_tool,
     make_predict_price_changes_tool,
@@ -47,7 +49,11 @@ def ask(
 ) -> Recommendation | RememberAck:
     remember_text = extract_remember_instruction(request.question)
     if remember_text is not None:
-        append_preference(remember_text)
+        if is_instinct(remember_text):
+            with get_connection() as conn:
+                log_instinct(conn, MY_TEAM_ID, remember_text)
+        else:
+            append_preference(remember_text)
         return RememberAck(remembered=remember_text)
 
     with get_connection() as conn:
@@ -58,6 +64,7 @@ def ask(
             make_get_injury_news_tool(conn, MY_TEAM_ID),
             make_get_creator_opinions_tool(conn),
             make_predict_price_changes_tool(conn),
+            make_get_instincts_tool(conn, MY_TEAM_ID),
         ]
         system = build_system_prompt(load_preferences())
         return reasoning.reason(request.question, tools, system=system)

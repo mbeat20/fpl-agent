@@ -94,6 +94,19 @@ def run_ingestion(
         cur.execute("DELETE FROM teams WHERE id = %s", (team_id,))
         cur.execute("INSERT INTO teams (id, name) VALUES (%s, %s)", (team_id, entry["name"]))
 
+        # Issue 13: persist the resolved gameweek so Instinct logging/reading
+        # (a chat-time path, not an ingestion one) never needs its own live
+        # FPL API call, and drop any Instinct left over from a gameweek that
+        # has since moved on.
+        cur.execute(
+            "INSERT INTO gameweek_state (team_id, gameweek) VALUES (%s, %s) "
+            "ON CONFLICT (team_id) DO UPDATE SET gameweek = EXCLUDED.gameweek, updated_at = now()",
+            (team_id, gameweek),
+        )
+        cur.execute(
+            "DELETE FROM instincts WHERE team_id = %s AND gameweek <> %s", (team_id, gameweek)
+        )
+
         for pick in picks:
             element = elements_by_id[pick["element"]]
             cur.execute(

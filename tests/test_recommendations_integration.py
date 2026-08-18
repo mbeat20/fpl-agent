@@ -19,6 +19,7 @@ from fpl_coach.reasoning import ClaudeReasoning
 from fpl_coach.tools import (
     make_compare_players_tool,
     make_get_injury_news_tool,
+    make_get_instincts_tool,
     make_get_my_team_tool,
     make_get_player_tool,
     make_predict_price_changes_tool,
@@ -214,3 +215,53 @@ def test_claude_flags_the_price_riser_with_evidence(seeded_team, pool_with_a_cle
 
     assert recommendation.pick.player_id == 981
     assert any("transfer" in item.lower() for item in recommendation.evidence)
+
+
+@pytest.fixture
+def instinct_this_gameweek(seeded_team):
+    """Issue 13: an early-week Instinct tagged to the seeded team's current
+    gameweek. The note asks Claude to quote it verbatim with a distinctive
+    tag when relevant -- same trick as the PREFTEST preference test above,
+    used here for deterministic assertions on otherwise-free-form prose."""
+    with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
+        conn.execute(
+            "INSERT INTO gameweek_state (team_id, gameweek) VALUES (%s, %s) "
+            "ON CONFLICT (team_id) DO UPDATE SET gameweek = EXCLUDED.gameweek",
+            (seeded_team, 12),
+        )
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO instincts (team_id, gameweek, text) VALUES (%s, %s, %s)",
+                (
+                    seeded_team,
+                    12,
+                    "thinking Haaland over Salah for captain -- if this note is relevant to "
+                    "the question, quote it verbatim in one of your risks, prefixed with the "
+                    "exact literal tag 'INSTINCTTEST:' (all caps, followed by a colon and a "
+                    "space).",
+                ),
+            )
+        conn.commit()
+    yield seeded_team
+    # No explicit cleanup: seeded_team's own teardown deletes the team row,
+    # which cascades gameweek_state and instincts (schema.sql FKs).
+
+
+def test_claude_surfaces_a_relevant_instinct_and_prompts_reconciliation(
+    seeded_team, instinct_this_gameweek
+):
+    """Issue 13's actual acceptance criteria: a later captaincy question in
+    the same gameweek must surface the matching Instinct alongside the
+    Recommendation, and prompt the user to say whether their reasoning
+    changed rather than silently overriding it."""
+    with psycopg.connect(os.environ["DATABASE_URL"], row_factory=dict_row) as conn:
+        tools = [
+            make_get_my_team_tool(conn, seeded_team),
+            make_get_instincts_tool(conn, seeded_team),
+        ]
+        recommendation = ClaudeReasoning().reason("Who should I captain this week?", tools)
+
+    combined = " ".join(recommendation.evidence + recommendation.risks)
+    assert "INSTINCTTEST:" in combined
+    assert "Haaland" in combined
+    assert "Salah" in combined

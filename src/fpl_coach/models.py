@@ -100,3 +100,14 @@ class PriceChangePredictions(BaseModel):
     # Issue 08: each list sorted most-likely-first.
     rising: list[PricePrediction]
     falling: list[PricePrediction]
+
+
+class Instinct(BaseModel):
+    text: str
+    logged_at: str
+
+
+class Instincts(BaseModel):
+    # Issue 13: always scoped to the current gameweek only -- never a
+    # cross-gameweek history.
+    notes: list[Instinct]

@@ -3,6 +3,7 @@ import os
 import psycopg
 import pytest
 from fastapi.testclient import TestClient
+from psycopg.rows import dict_row
 
 from fpl_coach.api.routes import get_reasoning
 from fpl_coach.app import app
@@ -147,6 +148,38 @@ def test_remember_instruction_appends_to_preferences_and_skips_reasoning(
     assert response.status_code == 200
     assert response.json() == {"remembered": "I dislike knee-jerk transfers"}
     assert "I dislike knee-jerk transfers" in load_preferences()
+
+
+def test_remember_thinking_instruction_logs_an_instinct_not_a_preference(
+    client, seeded_team, tmp_path, monkeypatch
+):
+    """Issue 13: same "remember: X" phrasing as a Preference, but "thinking
+    ..." text routes to the Instinct table instead of preferences.md."""
+    monkeypatch.setenv("PREFERENCES_PATH", str(tmp_path / "preferences.md"))
+    with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
+        conn.execute(
+            "INSERT INTO gameweek_state (team_id, gameweek) VALUES (%s, %s) "
+            "ON CONFLICT (team_id) DO UPDATE SET gameweek = EXCLUDED.gameweek",
+            (seeded_team, 7),
+        )
+
+    response = client.post(
+        "/recommendations",
+        json={"question": "remember: thinking Rogers to Enzo"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"remembered": "thinking Rogers to Enzo"}
+    assert "Rogers to Enzo" not in load_preferences()
+
+    with psycopg.connect(os.environ["DATABASE_URL"], row_factory=dict_row) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT text, gameweek FROM instincts WHERE team_id = %s", (seeded_team,)
+            )
+            row = cur.fetchone()
+    assert row["text"] == "thinking Rogers to Enzo"
+    assert row["gameweek"] == 7
 
 
 def test_one_off_question_is_not_persisted_to_preferences(
