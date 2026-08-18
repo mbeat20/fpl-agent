@@ -7,6 +7,7 @@ from fpl_coach.db import get_connection
 from fpl_coach.ingestion.voyage_client import VoyageClient
 from fpl_coach.instincts import is_instinct, log_instinct
 from fpl_coach.models import Recommendation
+from fpl_coach.outcomes import log_recommendation
 from fpl_coach.preferences import (
     append_preference,
     build_system_prompt,
@@ -70,4 +71,8 @@ def ask(
             make_search_creator_opinions_tool(conn, VoyageClient()),
         ]
         system = build_system_prompt(load_preferences())
-        return reasoning.reason(request.question, tools, system=system)
+        recommendation = reasoning.reason(request.question, tools, system=system)
+        log_recommendation(
+            conn, MY_TEAM_ID, recommendation.pick.player_id, recommendation.pick.player_name
+        )
+        return recommendation

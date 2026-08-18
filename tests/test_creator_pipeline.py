@@ -9,6 +9,10 @@ from fpl_coach.ingestion.extraction import FakeStanceExtractor
 from fpl_coach.ingestion.voyage_client import EMBEDDING_DIMENSION
 
 TEST_HANDLE = "pipeline_test_creator"
+# Issue 10: an unused team id with no gameweek_state row, so current_gameweek
+# resolves to None -- fine for tests not specifically about gameweek tagging
+# (a plain SELECT lookup, no FK to violate).
+NO_GAMEWEEK_TEAM_ID = -1
 
 POSTS = [
     {"url": "https://x.com/pipeline_test_creator/status/1", "text": "Buy Salah, great fixtures."},
@@ -71,6 +75,7 @@ def test_ingests_content_and_extracts_stances(test_creator):
             _FakeGrokClient(POSTS),
             FakeStanceExtractor(STANCES),
             _FakeVoyageClient(),
+            NO_GAMEWEEK_TEAM_ID,
             creator_ids=[test_creator],
         )
 
@@ -110,9 +115,11 @@ def test_re_running_ingestion_is_idempotent_and_does_not_duplicate(test_creator)
     voyage_client = _FakeVoyageClient()
 
     with _conn() as conn:
-        run_creator_ingestion(conn, grok_client, extractor, voyage_client, creator_ids=[test_creator])
+        run_creator_ingestion(
+            conn, grok_client, extractor, voyage_client, NO_GAMEWEEK_TEAM_ID, creator_ids=[test_creator]
+        )
         second_summary = run_creator_ingestion(
-            conn, grok_client, extractor, voyage_client, creator_ids=[test_creator]
+            conn, grok_client, extractor, voyage_client, NO_GAMEWEEK_TEAM_ID, creator_ids=[test_creator]
         )
 
         with conn.cursor() as cur:
@@ -146,6 +153,7 @@ def test_stances_are_matched_to_an_fpl_player_id_when_a_match_exists(test_creato
             _FakeGrokClient(POSTS[:1]),
             FakeStanceExtractor(STANCES),
             _FakeVoyageClient(),
+            NO_GAMEWEEK_TEAM_ID,
             creator_ids=[test_creator],
         )
 
@@ -158,3 +166,54 @@ def test_stances_are_matched_to_an_fpl_player_id_when_a_match_exists(test_creato
     # No fpl_players seeded in this test's isolation -- must not crash, and
     # must land on NULL (unmatched) rather than a wrong id.
     assert all(row["fpl_player_id"] is None for row in rows)
+
+
+def test_stances_are_tagged_with_the_team_s_current_gameweek(test_creator, seeded_team):
+    """Issue 10: a Stance is tagged with team_id's current gameweek at
+    extraction time, so a later ingestion cycle can find it once it's due
+    for an outcome. Uses seeded_team (MY_TEAM_ID) since gameweek_state is
+    keyed by team_id, not a global fact."""
+    with _conn() as conn:
+        conn.execute(
+            "INSERT INTO gameweek_state (team_id, gameweek) VALUES (%s, %s) "
+            "ON CONFLICT (team_id) DO UPDATE SET gameweek = EXCLUDED.gameweek",
+            (seeded_team, 9),
+        )
+        run_creator_ingestion(
+            conn,
+            _FakeGrokClient(POSTS[:1]),
+            FakeStanceExtractor(STANCES),
+            _FakeVoyageClient(),
+            seeded_team,
+            creator_ids=[test_creator],
+        )
+
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT gameweek FROM creator_stances WHERE creator_id = %s", (test_creator,)
+            )
+            rows = cur.fetchall()
+
+    assert rows and all(row["gameweek"] == 9 for row in rows)
+
+
+def test_stances_have_no_gameweek_when_team_ingestion_has_never_run(test_creator):
+    """NULL, not an error -- creator ingestion must not require team
+    ingestion to have run first."""
+    with _conn() as conn:
+        run_creator_ingestion(
+            conn,
+            _FakeGrokClient(POSTS[:1]),
+            FakeStanceExtractor(STANCES),
+            _FakeVoyageClient(),
+            NO_GAMEWEEK_TEAM_ID,
+            creator_ids=[test_creator],
+        )
+
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT gameweek FROM creator_stances WHERE creator_id = %s", (test_creator,)
+            )
+            rows = cur.fetchall()
+
+    assert rows and all(row["gameweek"] is None for row in rows)

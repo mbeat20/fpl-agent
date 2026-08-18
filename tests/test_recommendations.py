@@ -209,6 +209,33 @@ def test_pick_comes_from_the_seeded_squad(client, seeded_team):
     assert body["pick"]["player_name"] == "Erling Haaland"  # highest-priced seeded player
 
 
+def test_ask_logs_the_recommendation_for_later_outcome_matching(client, seeded_team):
+    """Issue 10: enough identity (player, gameweek) to later match this
+    Recommendation against what actually happened."""
+    with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
+        conn.execute(
+            "INSERT INTO gameweek_state (team_id, gameweek) VALUES (%s, %s) "
+            "ON CONFLICT (team_id) DO UPDATE SET gameweek = EXCLUDED.gameweek",
+            (seeded_team, 6),
+        )
+
+    response = client.post("/recommendations", json={"question": "Who should I captain?"})
+    picked = response.json()["pick"]
+
+    with psycopg.connect(os.environ["DATABASE_URL"], row_factory=dict_row) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT gameweek, player_id, player_name FROM recommendation_log "
+                "WHERE team_id = %s",
+                (seeded_team,),
+            )
+            row = cur.fetchone()
+
+    assert row["gameweek"] == 6
+    assert row["player_id"] == picked["player_id"]
+    assert row["player_name"] == picked["player_name"]
+
+
 def test_repeated_calls_return_the_identical_primary_pick(client, seeded_team):
     first = client.post("/recommendations", json={"question": "Who should I captain?"}).json()
     second = client.post("/recommendations", json={"question": "Who should I captain?"}).json()

@@ -158,3 +158,35 @@ CREATE TABLE IF NOT EXISTS instincts (
     text TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Issue 10 / ADR-0012: enough identity on each Recommendation to later match
+-- it against what actually happened (player, gameweek), plus outcome
+-- columns a subsequent run_ingestion cycle fills in once known (next
+-- gameweek's price movement, points scored -- for a captain pick, "paid
+-- off" is just outcome_points read in context, no separate column). Nothing
+-- in v1 reads outcome_* -- this only exists so v2's accuracy scoring
+-- (ADR-0001) has history instead of starting cold. gameweek and player_id
+-- are nullable: a Recommendation can in principle be made before any team
+-- ingestion has ever resolved a gameweek, and player_id has no FK for the
+-- same wholesale-fpl_players-refresh reason as creator_stances.fpl_player_id
+-- above.
+CREATE TABLE IF NOT EXISTS recommendation_log (
+    id SERIAL PRIMARY KEY,
+    team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+    gameweek INTEGER,
+    player_id INTEGER,
+    player_name TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    outcome_price_change NUMERIC(4, 1),
+    outcome_points INTEGER,
+    outcome_recorded_at TIMESTAMPTZ
+);
+
+-- Issue 10: same outcome shape as recommendation_log above, added to the
+-- existing creator_stances table. gameweek is nullable -- creator ingestion
+-- (creator_pipeline.py) can run before team ingestion has ever established
+-- a current gameweek for MY_TEAM_ID.
+ALTER TABLE creator_stances ADD COLUMN IF NOT EXISTS gameweek INTEGER;
+ALTER TABLE creator_stances ADD COLUMN IF NOT EXISTS outcome_price_change NUMERIC(4, 1);
+ALTER TABLE creator_stances ADD COLUMN IF NOT EXISTS outcome_points INTEGER;
+ALTER TABLE creator_stances ADD COLUMN IF NOT EXISTS outcome_recorded_at TIMESTAMPTZ;

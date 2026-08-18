@@ -34,6 +34,7 @@ BOOTSTRAP = {
             "transfers_in_event": 5000,
             "transfers_out_event": 1000,
             "cost_change_event": 0,
+            "event_points": 12,
         },
         {
             "id": 102,
@@ -50,6 +51,7 @@ BOOTSTRAP = {
             "transfers_in_event": 500,
             "transfers_out_event": 8000,
             "cost_change_event": -1,
+            "event_points": 2,
         },
         {
             "id": 103,
@@ -66,6 +68,7 @@ BOOTSTRAP = {
             "transfers_in_event": 0,
             "transfers_out_event": 0,
             "cost_change_event": 0,
+            "event_points": 6,
         },
     ],
     "teams": [
@@ -177,6 +180,7 @@ def test_run_ingestion_writes_correctly_shaped_rows():
         assert summary.players_pool_ingested == 3
         assert summary.understat_season == "2025"
         assert summary.understat_matched == 2
+        assert summary.outcomes_recorded == 0
 
         with conn.cursor() as cur:
             cur.execute("SELECT name FROM teams WHERE id = %s", (TEST_TEAM_ID,))
@@ -268,6 +272,122 @@ def test_run_ingestion_replaces_prior_seed_data():
         assert names == {"Salah", "Haaland", "Saka"}
         assert "Seed Player" not in names
     finally:
+        _cleanup(conn)
+        conn.close()
+
+
+def test_run_ingestion_preserves_a_same_gameweek_instinct():
+    """Issue 10 regression: run_ingestion used to DELETE FROM teams then
+    re-INSERT it, which cascade-deleted gameweek_state/instincts (FK'd to
+    teams(id) ON DELETE CASCADE) on every single cycle -- silently wiping
+    even a same-gameweek Instinct the purge below was never meant to touch.
+    Fixed by upserting the team row instead. BOOTSTRAP resolves gameweek 2."""
+    conn = psycopg.connect(os.environ["DATABASE_URL"], row_factory=dict_row)
+    try:
+        with conn.cursor() as cur:
+            cur.execute("INSERT INTO teams (id, name) VALUES (%s, %s)", (TEST_TEAM_ID, "Seed Team"))
+            cur.execute(
+                "INSERT INTO gameweek_state (team_id, gameweek) VALUES (%s, %s)", (TEST_TEAM_ID, 2)
+            )
+            cur.execute(
+                "INSERT INTO instincts (team_id, gameweek, text) VALUES (%s, %s, %s)",
+                (TEST_TEAM_ID, 2, "thinking test"),
+            )
+        conn.commit()
+
+        run_ingestion(
+            conn,
+            _fake_client(),
+            _fake_understat_client(),
+            TEST_TEAM_ID,
+            FPL_ENTRY_ID,
+            understat_season="2025",
+        )
+
+        with conn.cursor() as cur:
+            cur.execute("SELECT count(*) AS n FROM instincts WHERE team_id = %s", (TEST_TEAM_ID,))
+            assert cur.fetchone()["n"] == 1
+    finally:
+        _cleanup(conn)
+        conn.close()
+
+
+def test_run_ingestion_purges_a_stale_gameweek_instinct():
+    """The purge (`DELETE FROM instincts WHERE gameweek <> current`) only
+    means something once same-gameweek rows survive the team refresh --
+    ticket 13's AC4 test gap that let the cascade bug above hide."""
+    conn = psycopg.connect(os.environ["DATABASE_URL"], row_factory=dict_row)
+    try:
+        with conn.cursor() as cur:
+            cur.execute("INSERT INTO teams (id, name) VALUES (%s, %s)", (TEST_TEAM_ID, "Seed Team"))
+            cur.execute(
+                "INSERT INTO gameweek_state (team_id, gameweek) VALUES (%s, %s)", (TEST_TEAM_ID, 1)
+            )
+            cur.execute(
+                "INSERT INTO instincts (team_id, gameweek, text) VALUES (%s, %s, %s)",
+                (TEST_TEAM_ID, 1, "thinking stale"),
+            )
+        conn.commit()
+
+        run_ingestion(
+            conn,
+            _fake_client(),
+            _fake_understat_client(),
+            TEST_TEAM_ID,
+            FPL_ENTRY_ID,
+            understat_season="2025",
+        )
+
+        with conn.cursor() as cur:
+            cur.execute("SELECT count(*) AS n FROM instincts WHERE team_id = %s", (TEST_TEAM_ID,))
+            assert cur.fetchone()["n"] == 0
+    finally:
+        _cleanup(conn)
+        conn.close()
+
+
+def test_run_ingestion_records_outcomes_for_recommendations_from_an_earlier_gameweek():
+    """Issue 10: a subsequent ingestion cycle (this one, gameweek 2) fills
+    in the outcome of a Recommendation logged against an earlier gameweek,
+    from bootstrap-static's own event_points/cost_change_event."""
+    conn = psycopg.connect(os.environ["DATABASE_URL"], row_factory=dict_row)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO teams (id, name) VALUES (%s, %s)", (TEST_TEAM_ID, "Seed Team")
+            )
+            cur.execute(
+                "INSERT INTO recommendation_log (team_id, gameweek, player_id, player_name) "
+                "VALUES (%s, %s, %s, %s)",
+                (TEST_TEAM_ID, 1, 102, "Erling Haaland"),
+            )
+        conn.commit()
+
+        summary = run_ingestion(
+            conn,
+            _fake_client(),
+            _fake_understat_client(),
+            TEST_TEAM_ID,
+            FPL_ENTRY_ID,
+            understat_season="2025",
+        )
+
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT outcome_price_change, outcome_points, outcome_recorded_at "
+                "FROM recommendation_log WHERE team_id = %s AND player_id = %s",
+                (TEST_TEAM_ID, 102),
+            )
+            row = cur.fetchone()
+
+        assert summary.outcomes_recorded == 1
+        assert float(row["outcome_price_change"]) == -0.1  # cost_change_event -1 -> tenths
+        assert row["outcome_points"] == 2
+        assert row["outcome_recorded_at"] is not None
+    finally:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM recommendation_log WHERE team_id = %s", (TEST_TEAM_ID,))
+        conn.commit()
         _cleanup(conn)
         conn.close()
 

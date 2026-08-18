@@ -31,7 +31,8 @@ def main() -> None:
         f"Ingested {summary.team_name}: "
         f"{summary.players_ingested} players, {summary.fixtures_ingested} fixtures, "
         f"{summary.players_pool_ingested} pool players "
-        f"({summary.understat_matched} matched to Understat {summary.understat_season} xG/xA)."
+        f"({summary.understat_matched} matched to Understat {summary.understat_season} xG/xA), "
+        f"{summary.outcomes_recorded} outcomes recorded."
     )
 
 
@@ -54,7 +55,7 @@ def ingest_creators_main() -> None:
     extractor = ClaudeStanceExtractor()
     voyage_client = VoyageClient()
     with get_connection() as conn:
-        summary = run_creator_ingestion(conn, grok_client, extractor, voyage_client)
+        summary = run_creator_ingestion(conn, grok_client, extractor, voyage_client, MY_TEAM_ID)
 
     print(
         f"Processed {summary.creators_processed} creators: "

@@ -4,6 +4,7 @@ from psycopg import Connection
 
 from fpl_coach.ingestion.fpl_client import FPLClient
 from fpl_coach.ingestion.understat_client import UnderstatClient
+from fpl_coach.outcomes import record_pending_outcomes
 
 _POSITION_BY_ELEMENT_TYPE = {1: "GK", 2: "DEF", 3: "MID", 4: "FWD"}
 
@@ -17,6 +18,8 @@ class IngestionSummary:
     players_pool_ingested: int
     understat_season: str
     understat_matched: int
+    # Issue 10
+    outcomes_recorded: int
 
 
 def _current_gameweek(events: list[dict]) -> int:
@@ -91,8 +94,19 @@ def run_ingestion(
     xg_xa_by_name = _xg_xa_by_name(understat_players)
 
     with conn.cursor() as cur:
-        cur.execute("DELETE FROM teams WHERE id = %s", (team_id,))
-        cur.execute("INSERT INTO teams (id, name) VALUES (%s, %s)", (team_id, entry["name"]))
+        # Issue 10: upsert, not delete+insert -- a delete+reinsert of the
+        # teams row cascade-deletes gameweek_state/instincts/
+        # recommendation_log (all FK'd to teams(id) ON DELETE CASCADE) on
+        # every single ingestion cycle, silently wiping current-gameweek
+        # Instincts and all outcome-logging history each time. players is
+        # still wholesale-replaced, just via an explicit DELETE below rather
+        # than piggybacking on the teams cascade.
+        cur.execute(
+            "INSERT INTO teams (id, name) VALUES (%s, %s) "
+            "ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name",
+            (team_id, entry["name"]),
+        )
+        cur.execute("DELETE FROM players WHERE team_id = %s", (team_id,))
 
         # Issue 13: persist the resolved gameweek so Instinct logging/reading
         # (a chat-time path, not an ingestion one) never needs its own live
@@ -189,6 +203,12 @@ def run_ingestion(
 
     conn.commit()
 
+    # Issue 10 / ADR-0012: fills in the outcome of any Recommendation/Creator
+    # Stance from an earlier gameweek that hasn't had one recorded yet, now
+    # that this cycle's bootstrap-static elements are the freshest read of
+    # what actually happened.
+    outcomes_recorded = record_pending_outcomes(conn, elements_by_id, gameweek)
+
     return IngestionSummary(
         team_name=entry["name"],
         players_ingested=len(picks),
@@ -196,4 +216,5 @@ def run_ingestion(
         players_pool_ingested=len(pool_rows),
         understat_season=resolved_season,
         understat_matched=understat_matched,
+        outcomes_recorded=outcomes_recorded,
     )

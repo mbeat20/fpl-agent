@@ -5,6 +5,7 @@ from psycopg import Connection
 from fpl_coach.ingestion.extraction import StanceExtractor
 from fpl_coach.ingestion.grok_client import GrokClient
 from fpl_coach.ingestion.voyage_client import VoyageClient, vector_literal
+from fpl_coach.instincts import current_gameweek
 from fpl_coach.tools.get_player import find_player
 
 _MAX_CHUNK_CHARS = 2000
@@ -24,6 +25,7 @@ def run_creator_ingestion(
     grok_client: GrokClient,
     extractor: StanceExtractor,
     voyage_client: VoyageClient,
+    team_id: int,
     creator_ids: list[int] | None = None,
 ) -> CreatorIngestionSummary:
     """Per creator: pulls recent posts via Grok's X Search (issue 06), stores
@@ -46,7 +48,13 @@ def run_creator_ingestion(
     creator_ids as everything else above: embedding unscoped (ANY creator
     lacking chunks) would mean a test's FakeVoyageClient writes fabricated
     vectors into a real creator's content_chunks rows, the same class of
-    shared-DB pollution as issue 08's creator_ids fix."""
+    shared-DB pollution as issue 08's creator_ids fix.
+
+    team_id (issue 10): each extracted Stance is tagged with team_id's
+    current gameweek (NULL if no team ingestion has ever resolved one yet)
+    so a later ingestion cycle can record its outcome. Taken as a parameter
+    rather than importing MY_TEAM_ID here directly, so this ingestion module
+    doesn't reach into the api layer -- the CLI passes MY_TEAM_ID."""
     with conn.cursor() as cur:
         if creator_ids is None:
             cur.execute("SELECT id, x_handle FROM creators")
@@ -54,6 +62,7 @@ def run_creator_ingestion(
             cur.execute("SELECT id, x_handle FROM creators WHERE id = ANY(%s)", (creator_ids,))
         creators = cur.fetchall()
 
+    gameweek = current_gameweek(conn, team_id)
     content_ingested = 0
     content_skipped = 0
     stances_extracted = 0
@@ -83,8 +92,8 @@ def run_creator_ingestion(
                     cur.execute(
                         "INSERT INTO creator_stances "
                         "(creator_id, source_content_id, player_name, fpl_player_id, "
-                        " stance, confidence, reason) "
-                        "VALUES (%s, %s, %s, %s, %s, %s, %s)",
+                        " stance, confidence, reason, gameweek) "
+                        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s)",
                         (
                             creator["id"],
                             content_id,
@@ -93,6 +102,7 @@ def run_creator_ingestion(
                             stance["stance"],
                             stance["confidence"],
                             stance["reason"],
+                            gameweek,
                         ),
                     )
                 stances_extracted += 1
