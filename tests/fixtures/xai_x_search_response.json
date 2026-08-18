@@ -1,0 +1,166 @@
+{
+    "created_at": 1787062660,
+    "completed_at": 1787062660,
+    "id": "8551b38f-8a52-912b-81f1-db14d1cde1f0",
+    "max_output_tokens": null,
+    "model": "grok-4.3",
+    "object": "response",
+    "output": [
+        {
+            "id": "rs_8551b38f-8a52-912b-81f1-db14d1cde1f0",
+            "summary": [
+                {
+                    "text": "The question asks: \"List the 5 most recent distinct posts from the X account @FPLGeneral about specific FPL players (transfers, captaincy, buy/sell/hold). For each, give the post URL and a short parap...First, I need to use a tool to fetch recent posts from @FPLGeneral.\n\nI'll use x_keyword_search with query: from:FPLGeneral, mode: Latest, limit: 10.\n\nThat should give me the 10 most recent posts.",
+                    "type": "summary_text"
+                }
+            ],
+            "type": "reasoning",
+            "status": "completed"
+        },
+        {
+            "call_id": "xs_call-ad71eb35-08e3-44fb-bf51-748667ef3245-0",
+            "input": "{\"query\":\"from:FPLGeneral\",\"limit\":\"10\",\"mode\":\"Latest\"}",
+            "name": "x_keyword_search",
+            "type": "custom_tool_call",
+            "id": "ctc_8551b38f-8a52-912b-81f1-db14d1cde1f0_call-ad71eb35-08e3-44fb-bf51-748667ef3245-0",
+            "status": "completed"
+        },
+        {
+            "id": "tco_8551b38f-8a52-912b-81f1-db14d1cde1f0_call-ad71eb35-08e3-44fb-bf51-748667ef3245-0",
+            "summary": [],
+            "type": "reasoning",
+            "status": "completed"
+        },
+        {
+            "call_id": "xs_call-ad71eb35-08e3-44fb-bf51-748667ef3245-1",
+            "input": "{\"query\":\"posts about specific FPL players transfers captaincy buy sell hold advice\",\"limit\":\"10\",\"usernames\":[\"FPLGeneral\"]}",
+            "name": "x_semantic_search",
+            "type": "custom_tool_call",
+            "id": "ctc_8551b38f-8a52-912b-81f1-db14d1cde1f0_call-ad71eb35-08e3-44fb-bf51-748667ef3245-1",
+            "status": "completed"
+        },
+        {
+            "id": "tco_8551b38f-8a52-912b-81f1-db14d1cde1f0_call-ad71eb35-08e3-44fb-bf51-748667ef3245-1",
+            "summary": [],
+            "type": "reasoning",
+            "status": "completed"
+        },
+        {
+            "content": [
+                {
+                    "type": "output_text",
+                    "text": "**Here are the 5 most recent distinct posts** from @FPLGeneral (as of the latest data) that discuss specific FPL players in the context of transfers, captaincy, buy/sell/hold, or related advice:\n\n- **https://x.com/FPLGeneral/status/2089458687807217681** (17 Aug 2026)  \n  Recommends Leif (for bench boost spice) alongside a clean sheet banker and three defconers.[[1]](https://x.com/FPLGeneral/status/2089458687807217681)\n\n- **https://x.com/FPLGeneral/status/2089319112396751250** (17 Aug 2026)  \n  Ranks Haaland #1 and Bruno #2 (likely for captaincy or points).[[2]](https://x.com/FPLGeneral/status/2089319112396751250)\n\n- **https://x.com/FPLGeneral/status/2089300448545034469** (17 Aug 2026)  \n  Asks for the best Ipswich defender to buy/hold for bench boost in GW1.[[3]](https://x.com/FPLGeneral/status/2089300448545034469)\n\n- **https://x.com/FPLGeneral/status/2089632991903420587** (18 Aug 2026)  \n  Promotes a podcast episode covering the latest draft, listener questions, and captaincy choices.[[4]](https://x.com/FPLGeneral/status/2089632991903420587)\n\n- **https://x.com/FPLGeneral/status/2088972536226644405** (16 Aug 2026)  \n  Notes Haaland approaching 100% ownership (transfer/hold implications).[[5]](https://x.com/FPLGeneral/status/2088972536226644405)",
+                    "logprobs": [],
+                    "annotations": [
+                        {
+                            "type": "url_citation",
+                            "url": "https://x.com/FPLGeneral/status/2089458687807217681",
+                            "start_index": 363,
+                            "end_index": 421,
+                            "title": "1"
+                        },
+                        {
+                            "type": "url_citation",
+                            "url": "https://x.com/FPLGeneral/status/2089319112396751250",
+                            "start_index": 562,
+                            "end_index": 620,
+                            "title": "2"
+                        },
+                        {
+                            "type": "url_citation",
+                            "url": "https://x.com/FPLGeneral/status/2089300448545034469",
+                            "start_index": 768,
+                            "end_index": 826,
+                            "title": "3"
+                        },
+                        {
+                            "type": "url_citation",
+                            "url": "https://x.com/FPLGeneral/status/2089632991903420587",
+                            "start_index": 1000,
+                            "end_index": 1058,
+                            "title": "4"
+                        },
+                        {
+                            "type": "url_citation",
+                            "url": "https://x.com/FPLGeneral/status/2088972536226644405",
+                            "start_index": 1206,
+                            "end_index": 1264,
+                            "title": "5"
+                        }
+                    ]
+                }
+            ],
+            "id": "msg_8551b38f-8a52-912b-81f1-db14d1cde1f0",
+            "role": "assistant",
+            "type": "message",
+            "status": "completed"
+        }
+    ],
+    "parallel_tool_calls": true,
+    "previous_response_id": null,
+    "reasoning": {
+        "effort": "low",
+        "summary": "detailed"
+    },
+    "temperature": 0.7,
+    "text": {
+        "format": {
+            "type": "text"
+        }
+    },
+    "tool_choice": "auto",
+    "tools": [
+        {
+            "type": "x_search",
+            "allowed_x_handles": [
+                "FPLGeneral"
+            ]
+        }
+    ],
+    "top_p": 0.95,
+    "usage": {
+        "input_tokens": 12846,
+        "input_tokens_details": {
+            "cached_tokens": 7104
+        },
+        "output_tokens": 2083,
+        "output_tokens_details": {
+            "reasoning_tokens": 1743
+        },
+        "total_tokens": 14929,
+        "num_sources_used": 0,
+        "num_server_side_tools_used": 2,
+        "cost_in_usd_ticks": 238058000,
+        "server_side_tool_usage_details": {
+            "web_search_calls": 0,
+            "x_search_calls": 2,
+            "code_interpreter_calls": 0,
+            "file_search_calls": 0,
+            "mcp_calls": 0,
+            "document_search_calls": 0,
+            "image_generation_calls": 0
+        },
+        "context_details": {
+            "input_tokens": 7145,
+            "output_tokens": 752
+        }
+    },
+    "user": null,
+    "incomplete_details": null,
+    "status": "completed",
+    "store": true,
+    "metadata": {
+        "system_fingerprint": "fp_eb3c003fc66c14ed"
+    },
+    "background": false,
+    "service_tier": "default",
+    "truncation": "disabled",
+    "top_logprobs": 0,
+    "presence_penalty": 0.0,
+    "frequency_penalty": 0.0,
+    "prompt_cache_key": null,
+    "max_tool_calls": null,
+    "safety_identifier": null,
+    "error": null,
+    "instructions": null
+}

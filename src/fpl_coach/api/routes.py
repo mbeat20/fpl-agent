@@ -14,6 +14,7 @@ from fpl_coach.preferences import (
 from fpl_coach.reasoning import ClaudeReasoning, FakeReasoning, Reasoning
 from fpl_coach.tools import (
     make_compare_players_tool,
+    make_get_creator_opinions_tool,
     make_get_injury_news_tool,
     make_get_my_team_tool,
     make_get_player_tool,
@@ -54,6 +55,7 @@ def ask(
             make_get_player_tool(conn),
             make_compare_players_tool(conn),
             make_get_injury_news_tool(conn, MY_TEAM_ID),
+            make_get_creator_opinions_tool(conn),
         ]
         system = build_system_prompt(load_preferences())
         return reasoning.reason(request.question, tools, system=system)

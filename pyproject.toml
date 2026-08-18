@@ -19,6 +19,8 @@ dependencies = [
 
 [project.scripts]
 fpl-ingest = "fpl_coach.ingestion.cli:main"
+fpl-add-creator = "fpl_coach.ingestion.cli:add_creator_main"
+fpl-ingest-creators = "fpl_coach.ingestion.cli:ingest_creators_main"
 
 [build-system]
 requires = ["uv_build>=0.11.33,<0.12.0"]

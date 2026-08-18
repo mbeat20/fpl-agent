@@ -62,3 +62,26 @@ class Recommendation(BaseModel):
     evidence: list[str]
     risks: list[str]
     alternative: Alternative
+
+
+class Creator(BaseModel):
+    id: int
+    name: str
+    x_handle: str
+    trust_tier: str
+
+
+class CreatorStanceView(BaseModel):
+    creator_name: str
+    trust_tier: str
+    stance: str
+    confidence: float
+    reason: str
+
+
+class CreatorOpinions(BaseModel):
+    player_name: str
+    # Issue 06: sorted high trust tier first -- higher-trust opinions should
+    # weigh more heavily in the synthesis a Reasoning implementation builds
+    # from this.
+    stances: list[CreatorStanceView]

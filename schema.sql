@@ -58,3 +58,50 @@ CREATE TABLE IF NOT EXISTS fpl_players (
     xg NUMERIC(6, 2),
     xa NUMERIC(6, 2)
 );
+
+-- Issue 06: trusted X creators, manually assigned a trust tier at add-time
+-- (ADR-0001).
+CREATE TABLE IF NOT EXISTS creators (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    x_handle TEXT NOT NULL UNIQUE,
+    trust_tier TEXT NOT NULL CHECK (trust_tier IN ('high', 'medium', 'low'))
+);
+
+-- Issue 06: raw ingested content per creator, pre-extraction (Layer 1).
+-- xAI's X Search tool returns Grok's own synthesized paraphrase of each
+-- cited post plus that post's URL, not the post's verbatim text (confirmed
+-- against a real API call, 2026-08-18 -- docs.x.ai/developers/tools/x-search)
+-- -- content_text is that paraphrase, not a raw tweet body. UNIQUE
+-- (creator_id, source_url) + ON CONFLICT DO NOTHING makes re-ingestion
+-- idempotent, since content accumulates across runs rather than getting
+-- replaced like the ticket-03 team/player refresh does.
+CREATE TABLE IF NOT EXISTS creator_content (
+    id SERIAL PRIMARY KEY,
+    creator_id INTEGER NOT NULL REFERENCES creators(id) ON DELETE CASCADE,
+    source_url TEXT NOT NULL,
+    content_text TEXT NOT NULL,
+    fetched_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (creator_id, source_url)
+);
+
+-- Issue 06: structured Creator Stances extracted (Layer 2, an LLM step) from
+-- creator_content -- one piece of content may yield multiple Stances.
+-- Embedding creator_content into pgvector (ADR-0005, ticket 09's semantic
+-- search) is deferred until VOYAGE_API_KEY is available; this table only
+-- covers the structured half.
+-- fpl_player_id deliberately has no FK: ingestion/pipeline.py does
+-- `DELETE FROM fpl_players` wholesale every refresh, which would block or
+-- cascade-drop this table -- follows players.fpl_element_id's existing
+-- plain-INTEGER, best-effort-match, NULL-when-unmatched convention instead.
+CREATE TABLE IF NOT EXISTS creator_stances (
+    id SERIAL PRIMARY KEY,
+    creator_id INTEGER NOT NULL REFERENCES creators(id) ON DELETE CASCADE,
+    source_content_id INTEGER NOT NULL REFERENCES creator_content(id) ON DELETE CASCADE,
+    player_name TEXT NOT NULL,
+    fpl_player_id INTEGER,
+    stance TEXT NOT NULL CHECK (stance IN ('buy', 'sell', 'hold', 'captain')),
+    confidence NUMERIC(3, 2) NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
+    reason TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
