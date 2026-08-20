@@ -34,6 +34,15 @@ _MAX_TURNS = 16
 # arrays -- 1024 was tuned for a single submit_recommendation call and can
 # truncate mid-tool_use on a 3+ step plan.
 _MAX_TOKENS = 4096
+# A conversation that exhausts _MAX_TURNS, or a turn where Claude replies
+# with no tool_use at all, is real-Claude nondeterminism observed in
+# practice (see docs/agents' notes on this project) -- the same question
+# normally converges on a second, fresh attempt. One retry with a brand-new
+# conversation (not a continuation of the stuck one) turns an occasional
+# hard failure into a slower response instead of a 500 the user has to
+# manually retry themselves. This does not paper over a genuinely stuck
+# tool-call loop within a single attempt -- _MAX_TURNS still bounds that.
+_MAX_ATTEMPTS = 2
 
 
 @dataclass(frozen=True)
@@ -69,6 +78,18 @@ class ClaudeReasoning:
 
     def reason(
         self, prompt: str, tools: list[ToolSpec], system: str = ""
+    ) -> Recommendation | TransferPlan:
+        last_exc: RuntimeError | None = None
+        for _ in range(_MAX_ATTEMPTS):
+            try:
+                return self._reason_once(prompt, tools, system)
+            except RuntimeError as exc:
+                last_exc = exc
+        assert last_exc is not None
+        raise last_exc
+
+    def _reason_once(
+        self, prompt: str, tools: list[ToolSpec], system: str
     ) -> Recommendation | TransferPlan:
         get_my_team = next(t for t in tools if t.name == "get_my_team")
         known_players: dict[int, _KnownPlayer] = {
