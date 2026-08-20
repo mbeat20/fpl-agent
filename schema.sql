@@ -190,3 +190,19 @@ ALTER TABLE creator_stances ADD COLUMN IF NOT EXISTS gameweek INTEGER;
 ALTER TABLE creator_stances ADD COLUMN IF NOT EXISTS outcome_price_change NUMERIC(4, 1);
 ALTER TABLE creator_stances ADD COLUMN IF NOT EXISTS outcome_points INTEGER;
 ALTER TABLE creator_stances ADD COLUMN IF NOT EXISTS outcome_recorded_at TIMESTAMPTZ;
+
+-- Issue 15: the Team dashboard's unprompted weekly suggestion, generated
+-- on-demand (ADR-0002: no scheduler) the first time GET /team/suggestion is
+-- called for a given gameweek, then cached here so every later call that
+-- gameweek is a read, not a fresh Claude call. One row per team (same
+-- convention as gameweek_state) -- regenerating for a new gameweek
+-- overwrites the previous row rather than accumulating a history this
+-- endpoint has no use for (recommendation_log already keeps that trail).
+-- Holds whatever reasoning.reason() returned, a single-gameweek
+-- Recommendation or a longer-Horizon TransferPlan, as-is.
+CREATE TABLE IF NOT EXISTS team_suggestions (
+    team_id INTEGER PRIMARY KEY REFERENCES teams(id) ON DELETE CASCADE,
+    gameweek INTEGER NOT NULL,
+    recommendation JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
