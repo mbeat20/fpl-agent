@@ -45,3 +45,35 @@ export function isRememberAck(value: AskResponse): value is RememberAck {
 export function isTransferPlan(value: AskResponse): value is TransferPlan {
   return 'steps' in value
 }
+
+export interface Player {
+  id: number
+  name: string
+  position: string
+  club: string
+  price: number
+  ownership: number | null
+  form: number | null
+  status: string | null
+  news: string | null
+  xg: number | null
+  xa: number | null
+}
+
+export interface Team {
+  id: number
+  name: string
+  players: Player[]
+  current_gameweek: number | null
+}
+
+export interface Instinct {
+  text: string
+  logged_at: string
+}
+
+export interface Instincts {
+  notes: Instinct[]
+}
+
+export type Suggestion = Recommendation | TransferPlan | null
