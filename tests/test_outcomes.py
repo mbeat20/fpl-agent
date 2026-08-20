@@ -38,6 +38,26 @@ def test_log_recommendation_writes_a_row_tagged_with_the_current_gameweek(seeded
     assert row["outcome_recorded_at"] is None
 
 
+def test_log_recommendation_uses_an_explicit_gameweek_over_the_current_one(seeded_team):
+    """Issue 12: a TransferPlan step's own (possibly future) gameweek must
+    win over current_gameweek, not get silently overwritten by it."""
+    with _conn() as conn:
+        conn.execute(
+            "INSERT INTO gameweek_state (team_id, gameweek) VALUES (%s, %s) "
+            "ON CONFLICT (team_id) DO UPDATE SET gameweek = EXCLUDED.gameweek",
+            (seeded_team, 4),
+        )
+        log_recommendation(conn, seeded_team, 1093, "Mohamed Salah", gameweek=6)
+
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT gameweek FROM recommendation_log WHERE team_id = %s", (seeded_team,)
+            )
+            row = cur.fetchone()
+
+    assert row["gameweek"] == 6
+
+
 def test_log_recommendation_writes_null_gameweek_when_none_is_known_yet(seeded_team):
     """seeded_team creates the team but no gameweek_state row -- must not
     raise, unlike log_instinct, since a Recommendation is a byproduct of the

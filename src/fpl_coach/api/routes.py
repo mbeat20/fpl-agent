@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from fpl_coach.db import get_connection
 from fpl_coach.ingestion.voyage_client import VoyageClient
 from fpl_coach.instincts import is_instinct, log_instinct
-from fpl_coach.models import Recommendation
+from fpl_coach.models import Recommendation, TransferPlan
 from fpl_coach.outcomes import log_recommendation
 from fpl_coach.preferences import (
     append_preference,
@@ -47,10 +47,10 @@ def get_reasoning() -> Reasoning:
     return ClaudeReasoning()
 
 
-@router.post("/recommendations", response_model=Recommendation | RememberAck)
+@router.post("/recommendations", response_model=Recommendation | TransferPlan | RememberAck)
 def ask(
     request: AskRequest, reasoning: Reasoning = Depends(get_reasoning)
-) -> Recommendation | RememberAck:
+) -> Recommendation | TransferPlan | RememberAck:
     remember_text = extract_remember_instruction(request.question)
     if remember_text is not None:
         if is_instinct(remember_text):
@@ -73,8 +73,23 @@ def ask(
             make_recommend_transfers_tool(conn),
         ]
         system = build_system_prompt(load_preferences())
-        recommendation = reasoning.reason(request.question, tools, system=system)
-        log_recommendation(
-            conn, MY_TEAM_ID, recommendation.pick.player_id, recommendation.pick.player_name
-        )
-        return recommendation
+        result = reasoning.reason(request.question, tools, system=system)
+        if isinstance(result, TransferPlan):
+            # Issue 12: only the nearest step is an actual commitment right
+            # now -- record_pending_outcomes (ADR-0012) only ever resolves
+            # the immediately-prior gameweek's rows, so logging every
+            # future-dated step here would leave the rest as permanently
+            # unresolved speculation, not real history. `min` rather than
+            # `steps[0]`: nothing in the submit_plan schema or its
+            # description requires Claude to emit steps in gameweek order.
+            nearest = min(result.steps, key=lambda step: step.gameweek)
+            log_recommendation(
+                conn,
+                MY_TEAM_ID,
+                nearest.pick.player_id,
+                nearest.pick.player_name,
+                gameweek=nearest.gameweek,
+            )
+        else:
+            log_recommendation(conn, MY_TEAM_ID, result.pick.player_id, result.pick.player_name)
+        return result

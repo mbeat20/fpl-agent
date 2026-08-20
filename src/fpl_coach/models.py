@@ -22,6 +22,10 @@ class Team(BaseModel):
     id: int
     name: str
     players: list[Player]
+    # Issue 12: lets a Reasoning implementation anchor a multi-week plan's
+    # step gameweeks to a real FPL gameweek number. None until run_ingestion
+    # has resolved one for this team (same nullability as gameweek_state).
+    current_gameweek: int | None = None
 
 
 class PlayerComparison(BaseModel):
@@ -144,6 +148,28 @@ class TransferComparison(BaseModel):
     # reads as 0.0 in that case, which must not be read as "no gain",
     # especially pre-season when this is the common case.
     data_complete: bool
+
+
+class PlanStep(BaseModel):
+    # Issue 12: an absolute FPL gameweek number, anchored to
+    # Team.current_gameweek by whatever built the plan -- not a relative
+    # "week 1 of the plan" offset.
+    gameweek: int
+    pick: RecommendationPick
+    evidence: list[str]
+    risks: list[str]
+
+
+class TransferPlan(BaseModel):
+    # Issue 12: a longer Horizon than a single-gameweek Recommendation --
+    # returned as a distinct type rather than a field on Recommendation, so
+    # a single-gameweek question's response shape is untouched. horizon is
+    # a free-text label the Reasoning implementation chose (e.g.
+    # "multi-week", "season-long"), descriptive only -- never persisted
+    # (CONTEXT.md's Horizon is resolved live from the question each time).
+    horizon: str
+    confidence: float
+    steps: list[PlanStep]
 
 
 class Instinct(BaseModel):

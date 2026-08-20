@@ -15,6 +15,7 @@ from psycopg.rows import dict_row
 
 from fpl_coach.app import app
 from fpl_coach.ingestion.voyage_client import VoyageClient, vector_literal
+from fpl_coach.models import Recommendation, TransferPlan
 from fpl_coach.preferences import build_system_prompt, load_preferences
 from fpl_coach.reasoning import ClaudeReasoning
 from fpl_coach.tools import (
@@ -440,3 +441,81 @@ def test_endpoint_repeated_calls_return_the_identical_transfer_pick(
 
     assert first.status_code == second.status_code == 200
     assert first.json()["pick"] == second.json()["pick"]
+
+
+def _seed_gameweek(team_id: int, gameweek: int) -> None:
+    with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
+        conn.execute(
+            "INSERT INTO gameweek_state (team_id, gameweek) VALUES (%s, %s) "
+            "ON CONFLICT (team_id) DO UPDATE SET gameweek = EXCLUDED.gameweek",
+            (team_id, gameweek),
+        )
+        conn.commit()
+
+
+def test_claude_produces_a_multi_week_plan_for_a_long_term_question(
+    seeded_team, transfer_candidates
+):
+    """Issue 12's actual acceptance criteria: a long-term question resolves
+    to a multi-gameweek TransferPlan (not a single-gameweek Recommendation),
+    with each step grounded in the same kind of evidence a single-gameweek
+    Recommendation would cite (here, via recommend_transfers)."""
+    _seed_gameweek(seeded_team, 8)
+    with psycopg.connect(os.environ["DATABASE_URL"], row_factory=dict_row) as conn:
+        tools = [
+            make_get_my_team_tool(conn, seeded_team),
+            make_recommend_transfers_tool(conn),
+        ]
+        result = ClaudeReasoning().reason(
+            "What should my long-term transfer plan be? I want a plan spanning "
+            "several gameweeks, not just this week's pick. Consider transferring "
+            "Weak Player out for Strong Player at some point in that plan.",
+            tools,
+        )
+
+    assert isinstance(result, TransferPlan)
+    assert len(result.steps) >= 2
+    gameweeks = [step.gameweek for step in result.steps]
+    # Not "each step its own gameweek": two moves in one gameweek (a free
+    # transfer plus a hit) is legitimate FPL, and neither the submit_plan
+    # schema nor issue 12's ACs forbid it. What actually matters is that the
+    # plan is ordered and genuinely spans a horizon rather than sitting on
+    # one gameweek.
+    assert gameweeks == sorted(gameweeks)
+    assert gameweeks[0] >= 8  # anchored to the seeded current gameweek
+    assert gameweeks[-1] > gameweeks[0]  # genuinely spans a horizon
+    assert all(step.evidence for step in result.steps)
+
+
+def test_single_gameweek_question_still_resolves_to_a_recommendation(
+    seeded_team, transfer_candidates
+):
+    """Issue 12's 4th acceptance criterion: a single-gameweek question still
+    resolves to a Recommendation, confirming the two Horizons don't
+    interfere with each other. Both questions are transfer questions naming
+    the same two candidates -- deliberately, since this tool set (get_my_team
+    + recommend_transfers, no get_player/compare_players) has nothing suited
+    to ranking squad players against each other for captaincy, and asking a
+    captaincy question against it makes Claude misuse recommend_transfers to
+    try, chewing through the turn budget on a tool mismatch that has nothing
+    to do with the Horizon this test actually exercises."""
+    _seed_gameweek(seeded_team, 8)
+    with psycopg.connect(os.environ["DATABASE_URL"], row_factory=dict_row) as conn:
+        tools = [
+            make_get_my_team_tool(conn, seeded_team),
+            make_recommend_transfers_tool(conn),
+        ]
+        plan = ClaudeReasoning().reason(
+            "What should my long-term transfer plan be? I want a plan spanning "
+            "several gameweeks, not just this week's pick. Consider transferring "
+            "Weak Player out for Strong Player at some point in that plan.",
+            tools,
+        )
+        single = ClaudeReasoning().reason(
+            "Should I transfer Weak Player for Strong Player this gameweek? Assume "
+            "it's a free transfer.",
+            tools,
+        )
+
+    assert isinstance(plan, TransferPlan)
+    assert isinstance(single, Recommendation)

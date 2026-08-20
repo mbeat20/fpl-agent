@@ -3,10 +3,11 @@ from dataclasses import dataclass
 from typing import Any
 
 import anthropic
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from fpl_coach.models import (
     Alternative,
+    PlanStep,
     Player,
     PlayerComparison,
     PriceChangePredictions,
@@ -14,10 +15,25 @@ from fpl_coach.models import (
     RecommendationPick,
     Team,
     TransferComparison,
+    TransferPlan,
 )
 from fpl_coach.reasoning.base import ToolSpec
 
-_MAX_TURNS = 10
+# Issue 12: bumped from 10. A small manual comparison (not a rigorous
+# sample -- a handful of runs each way) suggested offering submit_plan
+# alongside submit_recommendation every turn costs a few extra turns of
+# deliberation on an ordinary single-gameweek question, occasionally enough
+# to blow the old budget. 16 is a judgment call, not a measured optimum --
+# revisit if turn-budget RuntimeErrors keep showing up in practice. Note
+# this does NOT fix a genuine stuck loop (e.g. a tool call Claude keeps
+# retrying with no exit condition) -- it only buys headroom for legitimate
+# multi-tool-call flows, at the cost of a slower, more expensive failure
+# when a conversation is actually stuck.
+_MAX_TURNS = 16
+# Issue 12: a submit_plan call carries several steps' worth of evidence/risk
+# arrays -- 1024 was tuned for a single submit_recommendation call and can
+# truncate mid-tool_use on a 3+ step plan.
+_MAX_TOKENS = 4096
 
 
 @dataclass(frozen=True)
@@ -51,7 +67,9 @@ class ClaudeReasoning:
         self._client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
         self._model = model or os.environ.get("REASONING_MODEL", "claude-sonnet-5")
 
-    def reason(self, prompt: str, tools: list[ToolSpec], system: str = "") -> Recommendation:
+    def reason(
+        self, prompt: str, tools: list[ToolSpec], system: str = ""
+    ) -> Recommendation | TransferPlan:
         get_my_team = next(t for t in tools if t.name == "get_my_team")
         known_players: dict[int, _KnownPlayer] = {
             p.id: _KnownPlayer(id=p.id, name=p.name) for p in get_my_team.handler().players
@@ -69,8 +87,12 @@ class ClaudeReasoning:
         for _ in range(_MAX_TURNS):
             response = self._client.messages.create(
                 model=self._model,
-                max_tokens=1024,
-                tools=anthropic_tools + [self._build_submit_tool(known_players)],
+                max_tokens=_MAX_TOKENS,
+                tools=anthropic_tools
+                + [
+                    self._build_submit_tool(known_players),
+                    self._build_submit_plan_tool(known_players),
+                ],
                 tool_choice={"type": "any"},
                 messages=messages,
                 **system_kwargs,
@@ -79,16 +101,36 @@ class ClaudeReasoning:
 
             tool_uses = [block for block in response.content if block.type == "tool_use"]
             if not tool_uses:
-                raise RuntimeError("Claude finished without calling submit_recommendation")
-
-            submission = next(
-                (b for b in tool_uses if b.name == "submit_recommendation"), None
-            )
-            if submission is not None:
-                return self._build_recommendation(submission.input, known_players)
+                raise RuntimeError(
+                    "Claude finished without calling submit_recommendation or submit_plan"
+                )
 
             tool_results = []
+            submitted = None
             for block in tool_uses:
+                if block.name in ("submit_recommendation", "submit_plan"):
+                    # The model API is a boundary: an occasional malformed
+                    # tool_use (seen in practice -- garbled args, a missing
+                    # required key) must not crash the whole request when
+                    # Claude could simply be told to retry with well-formed
+                    # arguments, same as any other tool call failing below.
+                    try:
+                        submitted = (
+                            self._build_recommendation(block.input, known_players)
+                            if block.name == "submit_recommendation"
+                            else self._build_plan(block.input, known_players)
+                        )
+                    except (KeyError, TypeError, ValidationError) as exc:
+                        tool_results.append(
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": block.id,
+                                "content": f"Invalid {block.name} arguments: {exc}",
+                                "is_error": True,
+                            }
+                        )
+                    continue
+
                 try:
                     result = handlers[block.name](**block.input)
                 except Exception as exc:  # noqa: BLE001 - surfaced to Claude, not raised
@@ -109,6 +151,10 @@ class ClaudeReasoning:
                 tool_results.append(
                     {"type": "tool_result", "tool_use_id": block.id, "content": content}
                 )
+
+            if submitted is not None:
+                return submitted
+
             messages.append({"role": "user", "content": tool_results})
 
         raise RuntimeError("Claude did not call submit_recommendation within the turn budget")
@@ -135,10 +181,11 @@ class ClaudeReasoning:
         return {
             "name": "submit_recommendation",
             "description": (
-                "Finalize the Recommendation for the user's question. Only players "
-                "already returned by get_my_team, get_player, compare_players, or "
-                "predict_price_changes in this conversation are valid picks — look a "
-                "player up before recommending them."
+                "Finalize the Recommendation for a single-gameweek question (one "
+                "captain/transfer/hold call). For a longer-horizon question (a "
+                "multi-week or season-long plan), call submit_plan instead. Only "
+                "players already returned by get_my_team, get_player, compare_players, "
+                "predict_price_changes, or recommend_transfers are valid picks."
             ),
             "input_schema": {
                 "type": "object",
@@ -166,6 +213,49 @@ class ClaudeReasoning:
         }
 
     @staticmethod
+    def _build_submit_plan_tool(known_players: dict[int, _KnownPlayer]) -> dict:
+        player_ids = sorted(known_players)
+        return {
+            "name": "submit_plan",
+            "description": (
+                "Finalize a multi-gameweek transfer plan for a longer-horizon question "
+                "(multi-week or season-long) instead of submit_recommendation. Anchor "
+                "each step's gameweek to get_my_team's current_gameweek. Each step "
+                "needs a player id already returned by get_my_team, get_player, "
+                "compare_players, predict_price_changes, or recommend_transfers. At "
+                "least two steps."
+            ),
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "horizon": {
+                        "type": "string",
+                        "description": (
+                            "brief label for the horizon inferred from the question, "
+                            "e.g. 'multi-week' or 'season-long'"
+                        ),
+                    },
+                    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                    "steps": {
+                        "type": "array",
+                        "minItems": 2,
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "gameweek": {"type": "integer"},
+                                "pick_player_id": {"type": "integer", "enum": player_ids},
+                                "evidence": {"type": "array", "items": {"type": "string"}},
+                                "risks": {"type": "array", "items": {"type": "string"}},
+                            },
+                            "required": ["gameweek", "pick_player_id", "evidence", "risks"],
+                        },
+                    },
+                },
+                "required": ["horizon", "confidence", "steps"],
+            },
+        }
+
+    @staticmethod
     def _build_recommendation(
         args: dict[str, Any], known_players: dict[int, _KnownPlayer]
     ) -> Recommendation:
@@ -184,4 +274,25 @@ class ClaudeReasoning:
                 player_name=alt_player.name,
                 reason=args["alternative_reason"],
             ),
+        )
+
+    @staticmethod
+    def _build_plan(
+        args: dict[str, Any], known_players: dict[int, _KnownPlayer]
+    ) -> TransferPlan:
+        return TransferPlan(
+            horizon=args["horizon"],
+            confidence=args["confidence"],
+            steps=[
+                PlanStep(
+                    gameweek=step["gameweek"],
+                    pick=RecommendationPick(
+                        player_id=known_players[step["pick_player_id"]].id,
+                        player_name=known_players[step["pick_player_id"]].name,
+                    ),
+                    evidence=step["evidence"],
+                    risks=step["risks"],
+                )
+                for step in args["steps"]
+            ],
         )

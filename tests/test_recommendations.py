@@ -7,7 +7,13 @@ from psycopg.rows import dict_row
 
 from fpl_coach.api.routes import get_reasoning
 from fpl_coach.app import app
-from fpl_coach.models import Alternative, Recommendation, RecommendationPick
+from fpl_coach.models import (
+    Alternative,
+    PlanStep,
+    Recommendation,
+    RecommendationPick,
+    TransferPlan,
+)
 from fpl_coach.preferences import load_preferences
 
 NON_SQUAD_PLAYER_ID = 921
@@ -115,6 +121,105 @@ class _SpyReasoning:
                 player_id=player.id, player_name=player.name, reason="spy alternative"
             ),
         )
+
+
+class _PlanSpyReasoning:
+    """Verifies plumbing only: that a TransferPlan (issue 12's longer-Horizon
+    response type) round-trips through /recommendations and is logged.
+    Does NOT verify the issue-12 acceptance criteria themselves -- that
+    Claude actually infers a longer Horizon from the question and produces
+    a plan grounded in real tool evidence -- which requires the real
+    Reasoning implementation. See test_recommendations_integration.py."""
+
+    def reason(self, prompt, tools, system=""):
+        team = next(t for t in tools if t.name == "get_my_team").handler()
+        first, second = team.players[0], team.players[1]
+        return TransferPlan(
+            horizon="multi-week",
+            confidence=0.6,
+            # Deliberately out of gameweek order: nothing in the submit_plan
+            # schema or its description requires Claude to emit steps
+            # ascending, so the nearest-step logging in routes.py must pick
+            # the step with the smallest gameweek rather than trusting
+            # steps[0] -- see test_ask_logs_only_the_plans_nearest_step.
+            steps=[
+                PlanStep(
+                    gameweek=2,
+                    pick=RecommendationPick(player_id=second.id, player_name=second.name),
+                    evidence=["spy evidence gw2"],
+                    risks=["spy risk gw2"],
+                ),
+                PlanStep(
+                    gameweek=1,
+                    pick=RecommendationPick(player_id=first.id, player_name=first.name),
+                    evidence=["spy evidence gw1"],
+                    risks=["spy risk gw1"],
+                ),
+            ],
+        )
+
+
+def test_ask_returns_a_transfer_plan_shape(seeded_team):
+    app.dependency_overrides[get_reasoning] = lambda: _PlanSpyReasoning()
+    try:
+        with TestClient(app) as test_client:
+            response = test_client.post(
+                "/recommendations",
+                json={"question": "What should my long-term transfer plan be?"},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert set(body) == {"horizon", "confidence", "steps"}
+    assert len(body["steps"]) == 2
+    assert {step["gameweek"] for step in body["steps"]} == {1, 2}
+    assert set(body["steps"][0]) == {"gameweek", "pick", "evidence", "risks"}
+
+
+def test_ask_logs_only_the_plans_nearest_step(seeded_team):
+    """Issue 12: only the nearest step is an actual commitment right now --
+    logging every future-dated step would leave the rest as permanently
+    unresolved speculation in recommendation_log (ADR-0012). The logged row
+    must carry the step's OWN gameweek (1, from _PlanSpyReasoning), not
+    current_gameweek's -- seeded deliberately different (9) here so a
+    regression that silently substitutes current_gameweek back in (as
+    log_recommendation's default does) fails this assertion instead of
+    passing by coincidence. _PlanSpyReasoning's steps are also deliberately
+    out of gameweek order, so this doubles as the regression test for
+    routes.py picking the step with the smallest gameweek rather than
+    trusting steps[0] -- nothing in the submit_plan schema or its
+    description requires Claude to emit steps ascending, so this is not an
+    assumption routes.py should get to make."""
+    with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
+        conn.execute(
+            "INSERT INTO gameweek_state (team_id, gameweek) VALUES (%s, %s) "
+            "ON CONFLICT (team_id) DO UPDATE SET gameweek = EXCLUDED.gameweek",
+            (seeded_team, 9),
+        )
+
+    app.dependency_overrides[get_reasoning] = lambda: _PlanSpyReasoning()
+    try:
+        with TestClient(app) as test_client:
+            test_client.post(
+                "/recommendations",
+                json={"question": "What should my long-term transfer plan be?"},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    with psycopg.connect(os.environ["DATABASE_URL"], row_factory=dict_row) as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT gameweek, player_id, player_name FROM recommendation_log WHERE team_id = %s",
+                (seeded_team,),
+            )
+            rows = cur.fetchall()
+
+    assert len(rows) == 1
+    assert rows[0]["player_name"] == "Mohamed Salah"
+    assert rows[0]["gameweek"] == 1
 
 
 def test_ask_passes_the_preferences_file_as_the_system_prompt(

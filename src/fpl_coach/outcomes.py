@@ -10,13 +10,22 @@ from psycopg import Connection
 from fpl_coach.instincts import current_gameweek
 
 
-def log_recommendation(conn: Connection, team_id: int, player_id: int, player_name: str) -> None:
-    """gameweek is whatever current_gameweek resolves to -- NULL if no team
-    ingestion has ever run yet, same as creator_stances.gameweek. Unlike
-    log_instinct, this never raises: a Recommendation is a byproduct of the
-    user's actual question, not a request to log something, so it must not
-    block the chat response just because the gameweek isn't known yet."""
-    gameweek = current_gameweek(conn, team_id)
+def log_recommendation(
+    conn: Connection, team_id: int, player_id: int, player_name: str, gameweek: int | None = None
+) -> None:
+    """gameweek defaults to whatever current_gameweek resolves to -- NULL if
+    no team ingestion has ever run yet, same as creator_stances.gameweek.
+    Issue 12: a TransferPlan step already knows its own (possibly future)
+    gameweek, which log_recommendation must use as-is rather than silently
+    overwriting with current_gameweek -- record_pending_outcomes only ever
+    resolves the immediately-prior gameweek's rows, so a row tagged with the
+    wrong gameweek gets the wrong cycle's price-change/points written onto
+    it, not just a missing outcome. Unlike log_instinct, this never raises: a
+    Recommendation is a byproduct of the user's actual question, not a
+    request to log something, so it must not block the chat response just
+    because the gameweek isn't known yet."""
+    if gameweek is None:
+        gameweek = current_gameweek(conn, team_id)
     with conn.cursor() as cur:
         cur.execute(
             "INSERT INTO recommendation_log (team_id, gameweek, player_id, player_name) "

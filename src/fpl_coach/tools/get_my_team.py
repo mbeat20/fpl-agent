@@ -1,5 +1,6 @@
 from psycopg import Connection
 
+from fpl_coach.instincts import current_gameweek
 from fpl_coach.models import Player, Team
 from fpl_coach.reasoning.base import ToolSpec
 
@@ -23,7 +24,12 @@ def get_my_team(conn: Connection, team_id: int) -> Team:
         )
         players = [Player(**row) for row in cur.fetchall()]
 
-    return Team(id=team_row["id"], name=team_row["name"], players=players)
+    return Team(
+        id=team_row["id"],
+        name=team_row["name"],
+        players=players,
+        current_gameweek=current_gameweek(conn, team_id),
+    )
 
 
 def make_get_my_team_tool(conn: Connection, team_id: int) -> ToolSpec:
@@ -32,7 +38,9 @@ def make_get_my_team_tool(conn: Connection, team_id: int) -> ToolSpec:
     return ToolSpec(
         name="get_my_team",
         description=(
-            "Returns the user's current FPL squad: team name and each player's id, "
+            "Returns the user's current FPL squad: team name, current_gameweek "
+            "(the FPL gameweek number right now, null if not yet known -- issue 12: "
+            "anchor a multi-week plan's step gameweeks to this), and each player's id, "
             "name, position, club, price, ownership %, form, and injury status "
             "(a=available, d=doubtful, i=injured, s=suspended, u=unavailable, "
             "n=not in squad; null for not-yet-ingested data)."
