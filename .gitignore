@@ -32,3 +32,6 @@ dist-ssr/
 # Third-party content kept locally only (copied docs, podcast transcripts)
 /prompt caching.md
 /docs/*.txt
+
+# Local MCP config (contains the Supabase project ref)
+.mcp.json

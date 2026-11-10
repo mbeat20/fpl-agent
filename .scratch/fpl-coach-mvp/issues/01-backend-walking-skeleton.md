@@ -16,4 +16,4 @@
 
 ## Comments
 
-Schema applied to Supabase (project `fzlhslxudcfzoqkytgbk`) via MCP. `backend/.env` created using the Supavisor session pooler (`aws-1-eu-west-3.pooler.supabase.com:5432`) rather than the direct host, since this machine has no outbound IPv6. Fixed a bug in `tests/conftest.py` (`conn.executemany` doesn't exist on psycopg3 `Connection`, only on cursors). Seam-1 suite: 5 passed. Seam-2 (`integration`) tests correctly deselected — `ANTHROPIC_API_KEY` isn't set locally.
+Schema applied to Supabase (project `<project-ref>`) via MCP. `backend/.env` created using the Supavisor session pooler (`aws-1-eu-west-3.pooler.supabase.com:5432`) rather than the direct host, since this machine has no outbound IPv6. Fixed a bug in `tests/conftest.py` (`conn.executemany` doesn't exist on psycopg3 `Connection`, only on cursors). Seam-1 suite: 5 passed. Seam-2 (`integration`) tests correctly deselected — `ANTHROPIC_API_KEY` isn't set locally.
