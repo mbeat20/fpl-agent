@@ -2,10 +2,12 @@ import os
 
 import psycopg
 from fastapi.testclient import TestClient
+from psycopg.rows import dict_row
 
 from fpl_coach.api.routes import get_reasoning
 from fpl_coach.app import app
-from fpl_coach.models import Alternative, Recommendation, RecommendationPick
+from fpl_coach.gameweek import planning_gameweek
+from fpl_coach.models import Alternative, Evidence, Recommendation, RecommendationPick
 
 
 def _set_gameweek(team_id: int, gameweek: int) -> None:
@@ -26,14 +28,18 @@ class _CountingSpyReasoning:
     def __init__(self):
         self.calls = 0
 
-    def reason(self, prompt, tools, system=""):
+    def reason(self, prompt, tools, system="", validate=None, history=None):
+        # Issue 22: accepted and ignored. These doubles return a fixed
+        # result, so there is nothing for the legality gate to refuse --
+        # what is under test here is the route wiring, not the rules.
         self.calls += 1
         team = next(t for t in tools if t.name == "get_my_team").handler()
         player = team.players[0]
         return Recommendation(
+            decision="captain",
             pick=RecommendationPick(player_id=player.id, player_name=player.name),
             confidence=0.7,
-            evidence=["spy evidence"],
+            evidence=[Evidence(text="spy evidence")],
             risks=["spy risk"],
             alternative=Alternative(
                 player_id=player.id, player_name=player.name, reason="spy alternative"
@@ -65,11 +71,23 @@ def test_get_team_instincts_returns_this_gameweeks_notes(client, seeded_team):
     assert [n["text"] for n in response.json()["notes"]] == ["thinking Rogers to Enzo"]
 
 
-def test_get_team_suggestion_is_null_before_any_gameweek_is_known(client, seeded_team):
+def test_get_team_suggestion_follows_the_planning_gameweek(client, seeded_team):
+    """The route returns null exactly when no gameweek can be resolved, and a
+    suggestion whenever one can.
+
+    Asserted against planning_gameweek rather than against a hardcoded
+    expectation, because the fixtures table is shared, global, and wholesale
+    replaced by run_ingestion -- so whether a gameweek is resolvable here
+    depends on what else has run. Pinning this to a literal made it pass or
+    fail on test ORDER, which is how it came to assert null: a prior suite run
+    had emptied the fixtures table."""
+    with psycopg.connect(os.environ["DATABASE_URL"], row_factory=dict_row) as conn:
+        expected_gameweek = planning_gameweek(conn, seeded_team)
+
     response = client.get("/team/suggestion")
 
     assert response.status_code == 200
-    assert response.json() is None
+    assert (response.json() is None) == (expected_gameweek is None)
 
 
 def test_get_team_suggestion_generates_and_caches(seeded_team):

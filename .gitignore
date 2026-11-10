@@ -1,0 +1,34 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Personal data (ADR-0010) — standing preferences, not shared/versioned
+preferences.md
+
+# Python
+__pycache__/
+*.py[oc]
+.venv*/
+.pytest_cache/
+*.egg-info
+build/
+wheels/
+
+# Node
+node_modules/
+dist/
+dist-ssr/
+*.local
+*.log
+
+# Editor / OS / local tool config
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+.claude/settings.local.json
+
+# Third-party content kept locally only (copied docs, podcast transcripts)
+/prompt caching.md
+/docs/*.txt

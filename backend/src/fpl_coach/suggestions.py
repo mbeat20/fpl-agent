@@ -9,6 +9,7 @@ log_recommendation).
 
 from psycopg import Connection
 from psycopg.types.json import Jsonb
+from pydantic import ValidationError
 
 from fpl_coach.models import Recommendation, TransferPlan
 
@@ -29,7 +30,16 @@ def get_cached_suggestion(
     if row is None:
         return None
     data = row["recommendation"]
-    return TransferPlan(**data) if "steps" in data else Recommendation(**data)
+    try:
+        return TransferPlan(**data) if "steps" in data else Recommendation(**data)
+    except ValidationError:
+        # A cached row written before the current Recommendation/TransferPlan
+        # shape (e.g. one predating the `decision` field) is unreadable now.
+        # This is a cache, so the only sane failure mode is a miss -- the
+        # caller regenerates and save_suggestion overwrites the row. Raising
+        # here would instead take the dashboard down until someone manually
+        # cleared the table.
+        return None
 
 
 def save_suggestion(

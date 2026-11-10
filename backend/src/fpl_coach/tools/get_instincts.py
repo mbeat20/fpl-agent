@@ -1,12 +1,15 @@
 from psycopg import Connection
 
-from fpl_coach.instincts import current_gameweek
+from fpl_coach.gameweek import planning_gameweek
 from fpl_coach.models import Instinct, Instincts
 from fpl_coach.reasoning.base import ToolSpec
 
 
 def get_instincts(conn: Connection, team_id: int) -> Instincts:
-    gameweek = current_gameweek(conn, team_id)
+    # Must match log_instinct's tagging, and for the same reason: the notes
+    # worth surfacing are the ones about the deadline the user can still act
+    # on, not the gameweek gameweek_state last happened to persist.
+    gameweek = planning_gameweek(conn, team_id)
     if gameweek is None:
         return Instincts(notes=[])
 

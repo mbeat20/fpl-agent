@@ -271,6 +271,41 @@ h1 {
   color: var(--warn);
 }
 
+/* Issue 17: the citation on an evidence line. Deliberately quiet -- it is a
+   way to check a claim, not a competing headline -- but it has to look
+   clickable, so it brightens and underlines on hover. */
+.citation {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  margin-left: 7px;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-faint);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 150ms ease-out, border-color 150ms ease-out;
+}
+
+.citation:hover,
+.citation:focus-visible {
+  color: var(--accent);
+  border-color: var(--accent-border);
+}
+
+.citation-stamp {
+  color: var(--text-dim);
+}
+
+.citation:hover .citation-stamp,
+.citation:focus-visible .citation-stamp {
+  color: var(--accent);
+}
+
 .alt-row {
   margin-top: 14px;
   padding-top: 14px;
@@ -365,38 +400,9 @@ h1 {
 
 /* View tabs */
 
-.view-tabs {
-  display: flex;
-  gap: 4px;
-  background: var(--bg-sunken);
-  border: 1px solid var(--border-soft);
-  border-radius: 10px;
-  padding: 4px;
-  width: fit-content;
-}
 
-.view-tab {
-  font-family: var(--font-mono);
-  font-size: 11.5px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-  background: transparent;
-  border: none;
-  border-radius: 7px;
-  padding: 8px 14px;
-  cursor: pointer;
-  transition: color 150ms ease-out, background 150ms ease-out;
-}
 
-.view-tab:hover {
-  color: var(--text-dim);
-}
 
-.view-tab.active {
-  color: var(--accent);
-  background: var(--accent-bg);
-}
 
 /* Team dashboard */
 
@@ -576,4 +582,1328 @@ h1 {
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
   }
+}
+
+/* Issue 19: consensus panel. Built around the CHANGE rather than the level --
+   a settled majority and a four-day surge produce the same current count, so
+   both weeks and the delta are always on screen together. Tone is a flag to
+   look harder, never a verdict: the ticket is explicit that the app makes the
+   influence visible and lets the user decide. */
+
+.consensus-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.consensus-row + .consensus-row {
+  border-top: 1px solid var(--border-soft);
+  padding-top: 18px;
+}
+
+.consensus-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.consensus-player {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--text);
+}
+
+.consensus-tag {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.consensus-tag-warn {
+  color: var(--warn);
+  background: var(--warn-bg);
+  border-color: var(--warn-border);
+}
+
+.consensus-tag-accent {
+  color: var(--accent);
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+}
+
+.consensus-numbers {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-bottom: 7px;
+}
+
+.consensus-now {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--text);
+}
+
+.consensus-of {
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-faint);
+}
+
+.consensus-when,
+.consensus-then {
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+.consensus-arrow,
+.consensus-then {
+  color: var(--text-faint);
+}
+
+.consensus-arrow {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.consensus-delta {
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+
+.consensus-delta-warn {
+  color: var(--warn);
+  border-color: var(--warn-border);
+}
+
+.consensus-delta-accent {
+  color: var(--accent);
+  border-color: var(--accent-border);
+}
+
+.consensus-summary {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--text-dim);
+}
+
+/* The user's own note, quoted back at them. Set apart from the summary
+   because the whole point of ticket 13 is that it is THEIR thinking, not the
+   app's. */
+.consensus-instinct {
+  margin-top: 9px;
+  padding: 8px 11px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-soft);
+  border-radius: 9px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.consensus-instinct-kicker {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-right: 8px;
+}
+
+.consensus-caveat,
+.consensus-footnote {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+
+.consensus-caveat {
+  margin-top: 8px;
+}
+
+.consensus-footnote {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-soft);
+}
+
+/* Issue 23: deadline panel */
+
+.countdown-clock {
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  margin-top: 4px;
+  /* Tabular figures so the seconds ticking over does not shuffle the
+     digits either side of them. */
+  font-variant-numeric: tabular-nums;
+}
+
+.countdown-clock.countdown-urgent {
+  color: var(--warn);
+}
+
+.countdown-stamp {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-faint);
+  margin-top: 5px;
+}
+
+.countdown-flag {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--warn);
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
+  border-radius: 5px;
+  padding: 3px 8px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.countdown-note {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--warn);
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
+  border-radius: 6px;
+  padding: 9px 11px;
+  margin-top: 14px;
+}
+
+/* Checklist */
+
+.checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.check-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.check-row:last-child {
+  border-bottom: none;
+}
+
+.check-mark {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 18px;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  text-align: center;
+  flex-shrink: 0;
+  border: 1px solid transparent;
+}
+
+.check-mark-ok {
+  color: var(--accent);
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+}
+
+/* Deliberately the warn palette, not danger. An item needing attention is
+   "look harder", never "you are wrong" -- the call stays with the user. */
+.check-mark-attention {
+  color: var(--warn);
+  background: var(--warn-bg);
+  border-color: var(--warn-border);
+}
+
+.check-mark-unknown {
+  color: var(--text-faint);
+  background: var(--bg-sunken);
+  border-color: var(--border);
+}
+
+.check-body {
+  min-width: 0;
+}
+
+.check-title {
+  font-size: 13px;
+  color: var(--text);
+  margin-bottom: 3px;
+}
+
+.check-detail {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-dim);
+}
+
+.check-unknown .check-detail {
+  color: var(--text-faint);
+}
+
+/* Price movement */
+
+.price-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.price-row {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.price-row:last-child {
+  border-bottom: none;
+}
+
+.price-arrow {
+  font-size: 9px;
+  flex-shrink: 0;
+  width: 12px;
+}
+
+.price-rise {
+  color: var(--accent);
+}
+
+.price-fall {
+  color: var(--danger);
+}
+
+.price-name {
+  font-size: 13px;
+  color: var(--text);
+  flex-shrink: 0;
+}
+
+
+/* Issue 20/23: squad shape on screen */
+
+.squad-armband {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  line-height: 15px;
+  width: 15px;
+  height: 15px;
+  border-radius: 4px;
+  text-align: center;
+  flex-shrink: 0;
+  color: var(--accent);
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-border);
+}
+
+.squad-armband-vice {
+  color: var(--text-dim);
+  background: var(--bg-sunken);
+  border-color: var(--border);
+}
+
+.squad-split {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin: 14px 0 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.squad-list-bench .squad-name {
+  color: var(--text-dim);
+}
+
+.squad-asof {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-faint);
+  margin-top: 10px;
+}
+
+/* Issue 25: roadmap panel */
+
+.roadmap-state {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border-radius: 5px;
+  padding: 3px 8px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  border: 1px solid transparent;
+}
+
+.roadmap-state-ok {
+  color: var(--accent);
+  background: var(--accent-bg);
+  border-color: var(--accent-border);
+}
+
+/* Warn, not danger: a drifted plan is a plan worth reopening, not a failure. */
+.roadmap-state-warn {
+  color: var(--warn);
+  background: var(--warn-bg);
+  border-color: var(--warn-border);
+}
+
+.roadmap-summary {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-dim);
+  margin-top: 10px;
+}
+
+.roadmap-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.roadmap-step {
+  padding: 10px 0 10px 11px;
+  border-bottom: 1px solid var(--border-soft);
+  border-left: 2px solid transparent;
+}
+
+.roadmap-step:last-child {
+  border-bottom: none;
+}
+
+.roadmap-step-ahead {
+  border-left-color: var(--border);
+}
+
+.roadmap-step-broken {
+  border-left-color: var(--warn-border);
+}
+
+/* An elapsed step is not a broken one -- the plan simply progressed -- so it
+   recedes rather than being flagged. */
+.roadmap-step-past {
+  opacity: 0.5;
+}
+
+.roadmap-step-head {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+.roadmap-step-decision {
+  font-size: 13px;
+  color: var(--text);
+}
+
+.roadmap-step-pick {
+  font-size: 13px;
+  color: var(--accent);
+}
+
+.roadmap-step-out {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.roadmap-step-tag {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.roadmap-step-problem {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--warn);
+  margin-top: 6px;
+}
+
+.roadmap-step-ref {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-top: 5px;
+}
+
+.roadmap-cost {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--warn);
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.roadmap-fixtures {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.roadmap-fixture {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-dim);
+  margin-top: 6px;
+}
+
+.roadmap-note {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-faint);
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-soft);
+}
+
+/* Issue 27: the Ask tab as a transcript */
+
+.transcript {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-bottom: 20px;
+}
+
+.turn {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.turn-who {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.turn-said {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.turn-user .turn-said {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  padding: 11px 13px;
+}
+
+/* Issue 27: the sentence explaining what changed about one step of a revised
+   plan. Deliberately quiet and set apart from the plan card below it -- it is
+   an annotation on the change, not part of the plan's own content. */
+.turn-revision {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-dim);
+  border-left: 2px solid var(--accent);
+  padding: 2px 0 2px 10px;
+  margin-bottom: 10px;
+}
+
+.reset-chat {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 4px 0;
+  margin-top: 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+  cursor: pointer;
+  transition: color 150ms ease-out;
+}
+
+.reset-chat:hover {
+  color: var(--text-dim);
+}
+
+/* Issue 28: attention board */
+
+.attention-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.attention-slice {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.attention-fresh {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--warn);
+  border: 1px solid var(--warn-border);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+
+/* Issue 29: themes */
+
+.themes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.theme-row {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.theme-row:last-child {
+  border-bottom: none;
+}
+
+.theme-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.theme-count {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.theme-mentions {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.theme-quote {
+  margin: 0 0 8px;
+  padding-left: 11px;
+  border-left: 2px solid var(--border);
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-dim);
+  font-style: italic;
+}
+
+.theme-players {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-dim);
+  margin-top: 8px;
+}
+
+.theme-players-kicker {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  margin-right: 8px;
+}
+
+/* ---------------------------------------------------------------------------
+   The refresh control.
+
+   Lives in the header, so it is deliberately quiet until it has something to
+   say: an unstyled-looking pill at rest, the warn palette once the data is
+   old or a run failed. The panel is an anchored popover rather than a modal
+   — checking how old your data is should not take over the screen.
+   --------------------------------------------------------------------------- */
+
+.refresh {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.refresh-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px 5px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-raised);
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: color 150ms ease-out, border-color 150ms ease-out, background 150ms ease-out;
+}
+
+.refresh-badge:hover {
+  color: var(--text);
+  border-color: var(--text-faint);
+}
+
+.refresh-dot {
+  font-size: 9px;
+  line-height: 1;
+}
+
+.refresh-ok .refresh-dot {
+  color: var(--accent);
+}
+
+.refresh-warn {
+  border-color: var(--warn-border);
+  background: var(--warn-bg);
+  color: var(--warn);
+}
+
+.refresh-warn .refresh-dot {
+  color: var(--warn);
+}
+
+.refresh-unknown .refresh-dot {
+  color: var(--text-faint);
+}
+
+.refresh-running .refresh-dot {
+  color: var(--accent);
+}
+
+.refresh-spin {
+  display: inline-block;
+  animation: refresh-spin 1.1s linear infinite;
+}
+
+@keyframes refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .refresh-spin {
+    animation: none;
+  }
+}
+
+.refresh-badge-label {
+  white-space: nowrap;
+}
+
+/* --- the panel --- */
+
+.refresh-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
+  width: min(380px, calc(100vw - 32px));
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-raised);
+  box-shadow: 0 18px 44px oklch(0.08 0.01 260 / 0.55);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.refresh-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.refresh-close {
+  border: 0;
+  background: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 12px;
+}
+
+.refresh-close:hover {
+  color: var(--text);
+}
+
+.refresh-empty,
+.refresh-foot {
+  font-size: 12px;
+  color: var(--text-faint);
+  line-height: 1.5;
+}
+
+.refresh-foot {
+  border-top: 1px solid var(--border-soft);
+  padding-top: 10px;
+}
+
+.refresh-foot code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.refresh-error {
+  font-size: 12px;
+  color: var(--danger);
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+/* --- one source --- */
+
+.refresh-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.refresh-row:last-of-type {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.refresh-row-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.refresh-row-title {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Stated on the row, not only in the confirmation, so the cost is known
+   before the click rather than after it. */
+.refresh-billed {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: var(--warn);
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-border);
+}
+
+.refresh-row-blurb {
+  font-size: 12px;
+  color: var(--text-faint);
+  line-height: 1.45;
+  margin-top: 3px;
+}
+
+.refresh-age {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: nowrap;
+  color: var(--text-dim);
+}
+
+.refresh-age.refresh-ok {
+  color: var(--accent);
+}
+
+.refresh-age.refresh-warn {
+  color: var(--warn);
+  background: none;
+  border: 0;
+}
+
+.refresh-age.refresh-unknown {
+  color: var(--text-faint);
+}
+
+.refresh-note {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
+  padding: 8px 10px;
+  background: var(--bg-sunken);
+  border-radius: 6px;
+}
+
+.refresh-run {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  line-height: 1.5;
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.refresh-run-bad {
+  color: var(--danger);
+  padding: 8px 10px;
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  border-radius: 6px;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.refresh-run-detail {
+  word-break: break-word;
+}
+
+/* --- the buttons --- */
+
+.refresh-go {
+  align-self: flex-start;
+  padding: 7px 13px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-sunken);
+  color: var(--text);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: border-color 150ms ease-out, color 150ms ease-out;
+}
+
+.refresh-go:hover:not(:disabled) {
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+
+.refresh-go:disabled {
+  color: var(--text-faint);
+  cursor: default;
+}
+
+.refresh-go-billed:hover {
+  border-color: var(--warn-border);
+  color: var(--warn);
+}
+
+.refresh-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid var(--warn-border);
+  background: var(--warn-bg);
+  border-radius: 6px;
+}
+
+.refresh-confirm-text {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--warn);
+}
+
+.refresh-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.refresh-cancel {
+  padding: 7px 13px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-dim);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.refresh-cancel:hover {
+  color: var(--text);
+}
+
+
+/* ---------------------------------------------------------------------------
+   The shell: header, nav, and the two page measures.
+
+   Two widths, chosen by what the page contains rather than for variety. The
+   Coach page is prose read at length and needs a readable line; the other four
+   are boards of facts, where 640px forced a single column and pushed the
+   checklist below the fold on the one screen meant to be taken in at a glance.
+   --------------------------------------------------------------------------- */
+
+.main-narrow {
+  max-width: 660px;
+}
+
+.main-wide {
+  max-width: 1100px;
+}
+
+.app-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.nav {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--bg-sunken);
+  align-self: flex-start;
+  flex-wrap: wrap;
+}
+
+.nav-item {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 7px 13px;
+  border-radius: 6px;
+  color: var(--text-faint);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 150ms ease-out, background 150ms ease-out;
+}
+
+.nav-item:hover {
+  color: var(--text);
+}
+
+.nav-item.active {
+  color: var(--accent);
+  background: var(--accent-bg);
+}
+
+.coach-column {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+}
+
+/* A page whose framing has to be read before its rows are. Used where the
+   caveat applies to everything below it — repeating it per row is what made
+   the attention board's eight identical paragraphs unreadable. */
+.page-lede {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-dim);
+  max-width: 68ch;
+}
+
+/* ---------------------------------------------------------------------------
+   Panel placeholders.
+
+   Now that panels load independently, a page shows several states at once and
+   each needs to be distinguishable: still loading, loaded-and-empty, and
+   failed. A spinner standing in for all three is what let the old dashboard
+   say "Loading your squad" for twenty seconds while the thing it was waiting
+   for was a reasoning call.
+   --------------------------------------------------------------------------- */
+
+.panel-skeleton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 96px;
+  border-style: dashed;
+}
+
+.panel-skeleton-tall {
+  min-height: 190px;
+}
+
+.skeleton-label {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.04em;
+  color: var(--text-faint);
+  text-align: center;
+  max-width: 46ch;
+  line-height: 1.6;
+}
+
+.panel-note {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+
+.panel-sub {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-faint);
+  margin-top: 5px;
+  max-width: 62ch;
+}
+
+/* ---------------------------------------------------------------------------
+   Deadline: the clock and the checklist side by side.
+
+   They answer the two halves of one question — how long have I got, and is
+   anything wrong — so they belong on one line. Stacked, the checklist started
+   below the fold.
+   --------------------------------------------------------------------------- */
+
+.deadline-split {
+  display: grid;
+  grid-template-columns: minmax(210px, 0.8fr) minmax(0, 1.6fr);
+  gap: 28px;
+}
+
+@media (max-width: 760px) {
+  .deadline-split {
+    grid-template-columns: 1fr;
+    gap: 22px;
+  }
+}
+
+.deadline-clock-col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  /* Centred against the checklist rather than top-aligned. The clock is three
+     lines and the checklist is five items, so top-aligning left a visibly
+     empty quarter of the card. Nothing useful and true was available to fill
+     it with, and inventing a metric to balance a layout is how a screen ends
+     up showing a number nobody asked for. */
+  justify-content: center;
+}
+
+@media (max-width: 760px) {
+  .deadline-clock-col {
+    justify-content: flex-start;
+  }
+}
+
+.deadline-check-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  /* The divider between the two halves, rather than a border on the panel:
+     it should not appear when they stack. */
+  padding-left: 28px;
+  border-left: 1px solid var(--border-soft);
+}
+
+@media (max-width: 760px) {
+  .deadline-check-col {
+    padding-left: 0;
+    border-left: 0;
+    border-top: 1px solid var(--border-soft);
+    padding-top: 20px;
+  }
+}
+
+.deadline-check-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* ---------------------------------------------------------------------------
+   Price movement.
+
+   Was seventeen identical rows of raw transfer counts with the interesting
+   part truncated off the end. Now: a figures column that cannot be clipped,
+   and "moved today" as its own mark rather than a suffix on a sentence.
+   --------------------------------------------------------------------------- */
+
+.price-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.price-figures {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+.price-owned {
+  color: var(--text-faint);
+}
+
+.price-moved {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: var(--text-dim);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-soft);
+  white-space: nowrap;
+}
+
+.price-list-rest {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.price-more {
+  align-self: flex-start;
+  margin-top: 10px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--border);
+}
+
+.price-more:hover {
+  color: var(--text);
+}
+
+/* ---------------------------------------------------------------------------
+   Attention board, grouped by movement.
+
+   `consensus.py` writes its summary for the reasoning layer to read, so every
+   surging row legitimately ends with the same caveat. Eight of those in a
+   column turned the panel's most important sentence into wallpaper. It is now
+   the group's heading instead, said once, with the rows carrying only their
+   own numbers.
+   --------------------------------------------------------------------------- */
+
+.attention-group + .attention-group {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.attention-group-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.attention-group-count {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  color: var(--text-faint);
+}
+
+.attention-group-caveat {
+  margin: 7px 0 12px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text-dim);
+  max-width: 74ch;
+}
+
+/* One line per player now that the prose is gone, so a dozen rows read as a
+   table rather than as a dozen paragraphs. */
+.attention-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 7px 0;
+  border-top: 1px solid var(--border-soft);
+}
+
+.attention-row:first-child {
+  border-top: 0;
+}
+
+.attention-row .consensus-player {
+  min-width: 13ch;
+}
+
+.attention-row .consensus-numbers {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.attention-why {
+  margin-left: auto;
+  color: var(--text-faint);
+  font-size: 11px;
+  cursor: help;
+}
+
+.attention-why:hover {
+  color: var(--text-dim);
+}
+
+/* A theme's name, above its evidence. These were the same string until
+   2026-09-04, when the panel was first opened and a transcript sentence turned
+   out to be unusable as a heading. */
+.theme-title {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1.35;
+}
+
+.theme-counts {
+  margin-top: 4px;
+  gap: 10px;
 }

@@ -1,0 +1,30 @@
+{
+  "output": [
+    {
+      "type": "message",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "Here are the 5 most recent distinct posts from @LiveFPLnet matching the criteria** (focusing on specific FPL players and topics like transfers/ownership, captaincy via effective ownership, or buy/sell/hold signals). These are drawn from the account's recent activity (as of August 2026), prioritizing recency and relevance:\n\n1. **Post URL**: https://x.com/LiveFPLnet/status/2090135273770295573  \n   **Paraphrase**: Shares predicted effective ownership (xEO, factoring in captaincy and benching) for key players ahead of the season, highlighting Haaland at 134%, Bruno at 76%, J Pedro at 66%, Szoboszlai at 42%, and others down the list.[[1]](https://x.com/LiveFPLnet/status/2090135273770295573)\n\n2. **Post URL**: https://x.com/LiveFPLnet/status/2056802835581309025  \n   **Paraphrase**: Details ownership increases in the top 100k due to J Pedro's autosubs, listing specific players like Tavernier.[[2]](https://x.com/LiveFPLnet/status/2056802835581309025)\n\n3. **Post URL**: https://x.com/LiveFPLnet/status/2044321987654321000  \n   **Paraphrase**: Argues Salah remains the safest captain despite a tough fixture, on the basis of effective ownership rather than expected points.[[3]](https://x.com/LiveFPLnet/status/2044321987654321000)\n",
+          "annotations": [
+            {
+              "type": "url_citation",
+              "url": "https://x.com/LiveFPLnet/status/2090135273770295573",
+              "start_index": 342
+            },
+            {
+              "type": "url_citation",
+              "url": "https://x.com/LiveFPLnet/status/2056802835581309025",
+              "start_index": 713
+            },
+            {
+              "type": "url_citation",
+              "url": "https://x.com/LiveFPLnet/status/2044321987654321000",
+              "start_index": 974
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

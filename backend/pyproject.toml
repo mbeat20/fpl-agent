@@ -15,12 +15,14 @@ dependencies = [
     "pydantic>=2.13.4",
     "python-dotenv>=1.2.2",
     "uvicorn[standard]>=0.52.1",
+    "youtube-transcript-api>=1.2.2",
 ]
 
 [project.scripts]
 fpl-ingest = "fpl_coach.ingestion.cli:main"
 fpl-add-creator = "fpl_coach.ingestion.cli:add_creator_main"
 fpl-ingest-creators = "fpl_coach.ingestion.cli:ingest_creators_main"
+fpl-link-youtube = "fpl_coach.ingestion.cli:link_youtube_main"
 
 [build-system]
 requires = ["uv_build>=0.11.33,<0.12.0"]

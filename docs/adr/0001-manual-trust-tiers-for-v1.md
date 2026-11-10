@@ -1,0 +1,3 @@
+# Manual creator trust tiers for v1, not computed accuracy scores
+
+The initial plan's Evaluation section describes scoring creators on Transfer Accuracy and Captain Accuracy to build a weighted consensus. For v1, we're deferring that: creators are manually assigned a trust tier (High/Medium/Low) when added, and Recommendations weight Creator Stances by tier. Computed accuracy scoring requires an outcome-tracking pipeline (logging every Creator Stance against what actually happened) and enough history to be meaningful — neither exists yet, and building it before there's data to evaluate would be overbuilding. Accuracy-based scoring is a candidate v2 feature once stances and outcomes have accumulated.

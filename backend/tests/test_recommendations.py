@@ -9,6 +9,7 @@ from fpl_coach.api.routes import get_reasoning
 from fpl_coach.app import app
 from fpl_coach.models import (
     Alternative,
+    Evidence,
     PlanStep,
     Recommendation,
     RecommendationPick,
@@ -21,11 +22,19 @@ NON_SQUAD_PLAYER_ID = 921
 
 @pytest.fixture
 def non_squad_player():
-    """A pool player (issue 05) with Understat stats, not part of the seeded
+    """A pool player (issue 05) with xG/xA stats, not part of the seeded
     squad — exercises get_player being reachable for transfer-target
     questions, not just squad members."""
     with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
         conn.execute("DELETE FROM fpl_players WHERE id = %s", (NON_SQUAD_PLAYER_ID,))
+        # find_player matches on name, and real ingestion puts a real Watkins
+        # in the pool. Without this the spy resolves the real row and the
+        # assertion below compares against the wrong id -- the test only ever
+        # passed while fpl_players was empty.
+        conn.execute(
+            "DELETE FROM fpl_players WHERE name ILIKE %s AND id <> %s",
+            ("%Watkins%", NON_SQUAD_PLAYER_ID),
+        )
         conn.execute(
             "INSERT INTO fpl_players "
             "(id, name, full_name, position, club, price, ownership, form, status, news, "
@@ -49,6 +58,14 @@ def non_squad_player():
     yield NON_SQUAD_PLAYER_ID
     with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
         conn.execute("DELETE FROM fpl_players WHERE id = %s", (NON_SQUAD_PLAYER_ID,))
+        # find_player matches on name, and real ingestion puts a real Watkins
+        # in the pool. Without this the spy resolves the real row and the
+        # assertion below compares against the wrong id -- the test only ever
+        # passed while fpl_players was empty.
+        conn.execute(
+            "DELETE FROM fpl_players WHERE name ILIKE %s AND id <> %s",
+            ("%Watkins%", NON_SQUAD_PLAYER_ID),
+        )
 
 
 class _WorthBuyingSpyReasoning:
@@ -59,13 +76,17 @@ class _WorthBuyingSpyReasoning:
     non-squad player — which requires the real Reasoning implementation.
     See test_recommendations_integration.py for that."""
 
-    def reason(self, prompt, tools, system=""):
+    def reason(self, prompt, tools, system="", validate=None, history=None):
+        # Issue 22: accepted and ignored. These doubles return a fixed
+        # result, so there is nothing for the legality gate to refuse --
+        # what is under test here is the route wiring, not the rules.
         get_player = next(t for t in tools if t.name == "get_player")
         player = get_player.handler(name="Watkins")
         return Recommendation(
+            decision="captain",
             pick=RecommendationPick(player_id=player.id, player_name=player.name),
             confidence=0.6,
-            evidence=[f"{player.name} has posted {player.xg} xG and {player.xa} xA."],
+            evidence=[Evidence(text=f"{player.name} has posted {player.xg} xG and {player.xa} xA.")],
             risks=["Sample evidence only."],
             alternative=Alternative(
                 player_id=player.id, player_name=player.name, reason="spy alternative"
@@ -82,14 +103,18 @@ class _InjuryNewsSpyReasoning:
     which requires the real Reasoning implementation. See
     test_recommendations_integration.py for that."""
 
-    def reason(self, prompt, tools, system=""):
+    def reason(self, prompt, tools, system="", validate=None, history=None):
+        # Issue 22: accepted and ignored. These doubles return a fixed
+        # result, so there is nothing for the legality gate to refuse --
+        # what is under test here is the route wiring, not the rules.
         get_injury_news = next(t for t in tools if t.name == "get_injury_news")
         summary = get_injury_news.handler()
         first, second = summary.players[0], summary.players[1]
         return Recommendation(
+            decision="captain",
             pick=RecommendationPick(player_id=first.player_id, player_name=first.player_name),
             confidence=0.5,
-            evidence=["spy evidence"],
+            evidence=[Evidence(text="spy evidence")],
             risks=[
                 f"{p.player_name}: injury_risk={p.injury_risk}, fixture_risk={p.fixture_risk}"
                 for p in summary.players
@@ -107,15 +132,19 @@ class _SpyReasoning:
         self.last_system = None
         self.called = False
 
-    def reason(self, prompt, tools, system=""):
+    def reason(self, prompt, tools, system="", validate=None, history=None):
+        # Issue 22: accepted and ignored. These doubles return a fixed
+        # result, so there is nothing for the legality gate to refuse --
+        # what is under test here is the route wiring, not the rules.
         self.called = True
         self.last_system = system
         team = next(t for t in tools if t.name == "get_my_team").handler()
         player = team.players[0]
         return Recommendation(
+            decision="captain",
             pick=RecommendationPick(player_id=player.id, player_name=player.name),
             confidence=0.5,
-            evidence=["spy evidence"],
+            evidence=[Evidence(text="spy evidence")],
             risks=["spy risk"],
             alternative=Alternative(
                 player_id=player.id, player_name=player.name, reason="spy alternative"
@@ -131,7 +160,10 @@ class _PlanSpyReasoning:
     a plan grounded in real tool evidence -- which requires the real
     Reasoning implementation. See test_recommendations_integration.py."""
 
-    def reason(self, prompt, tools, system=""):
+    def reason(self, prompt, tools, system="", validate=None, history=None):
+        # Issue 22: accepted and ignored. These doubles return a fixed
+        # result, so there is nothing for the legality gate to refuse --
+        # what is under test here is the route wiring, not the rules.
         team = next(t for t in tools if t.name == "get_my_team").handler()
         first, second = team.players[0], team.players[1]
         return TransferPlan(
@@ -145,14 +177,16 @@ class _PlanSpyReasoning:
             steps=[
                 PlanStep(
                     gameweek=2,
+                    decision="transfer",
                     pick=RecommendationPick(player_id=second.id, player_name=second.name),
-                    evidence=["spy evidence gw2"],
+                    evidence=[Evidence(text="spy evidence gw2")],
                     risks=["spy risk gw2"],
                 ),
                 PlanStep(
                     gameweek=1,
+                    decision="transfer",
                     pick=RecommendationPick(player_id=first.id, player_name=first.name),
-                    evidence=["spy evidence gw1"],
+                    evidence=[Evidence(text="spy evidence gw1")],
                     risks=["spy risk gw1"],
                 ),
             ],
@@ -175,7 +209,17 @@ def test_ask_returns_a_transfer_plan_shape(seeded_team):
     assert set(body) == {"horizon", "confidence", "steps"}
     assert len(body["steps"]) == 2
     assert {step["gameweek"] for step in body["steps"]} == {1, 2}
-    assert set(body["steps"][0]) == {"gameweek", "pick", "evidence", "risks"}
+    # Issue 25 added player_out: a transfer step names both sides, because
+    # without the outgoing player the budget for every later step is
+    # unknowable and the plan cannot be validated at all.
+    assert set(body["steps"][0]) == {
+        "gameweek",
+        "decision",
+        "pick",
+        "player_out",
+        "evidence",
+        "risks",
+    }
 
 
 def test_ask_logs_only_the_plans_nearest_step(seeded_team):
@@ -302,7 +346,7 @@ def test_ask_returns_a_recommendation_shape(client, seeded_team):
 
     assert response.status_code == 200
     body = response.json()
-    assert set(body) == {"pick", "confidence", "evidence", "risks", "alternative"}
+    assert set(body) == {"decision", "pick", "confidence", "evidence", "risks", "alternative"}
     assert set(body["pick"]) == {"player_id", "player_name"}
     assert set(body["alternative"]) == {"player_id", "player_name", "reason"}
 
@@ -384,4 +428,6 @@ def test_worth_buying_wiring_reaches_get_player_for_a_non_squad_player(
     body = response.json()
     assert body["pick"]["player_id"] == non_squad_player
     assert body["pick"]["player_name"] == "Watkins"
-    assert any("xG" in item and "xA" in item for item in body["evidence"])
+    assert any(
+        "xG" in item["text"] and "xA" in item["text"] for item in body["evidence"]
+    )

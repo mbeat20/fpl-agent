@@ -1,13 +1,20 @@
 import type { Recommendation } from '../types'
+import { decisionLabel } from '../types'
 import ConfidenceSignal from './ConfidenceSignal'
+import EvidenceLine from './EvidenceLine'
 
 export default function RecommendationCard({ recommendation }: { recommendation: Recommendation }) {
+  const { decision, pick, alternative } = recommendation
+
   return (
     <div className="panel">
       <div className="panel-head">
         <div>
-          <div className="panel-kicker">Recommendation</div>
-          <div className="pick-name">{recommendation.pick.player_name}</div>
+          {/* A pick-less decision (a "roll") has no player to headline, so the
+              decision itself becomes the headline rather than a player the
+              recommendation never actually named. */}
+          <div className="panel-kicker">{pick ? decisionLabel(decision) : 'Recommendation'}</div>
+          <div className="pick-name">{pick ? pick.player_name : decisionLabel(decision)}</div>
         </div>
         <ConfidenceSignal confidence={recommendation.confidence} />
       </div>
@@ -16,9 +23,7 @@ export default function RecommendationCard({ recommendation }: { recommendation:
 
       <div className="section-h">Evidence</div>
       {recommendation.evidence.map((item, i) => (
-        <div className="evidence-line" key={i}>
-          {item}
-        </div>
+        <EvidenceLine item={item} key={i} />
       ))}
 
       {recommendation.risks.length > 0 && (
@@ -34,9 +39,11 @@ export default function RecommendationCard({ recommendation }: { recommendation:
         </>
       )}
 
-      <div className="alt-row">
-        ALT → <b>{recommendation.alternative.player_name}</b> — {recommendation.alternative.reason}
-      </div>
+      {alternative && (
+        <div className="alt-row">
+          ALT → <b>{alternative.player_name}</b> — {alternative.reason}
+        </div>
+      )}
     </div>
   )
 }

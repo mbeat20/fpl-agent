@@ -4,6 +4,8 @@ import os
 import re
 from pathlib import Path
 
+from fpl_coach.fpl_rules import FPL_DOMAIN_BRIEFING
+
 DEFAULT_PATH = Path(__file__).resolve().parent.parent.parent / "preferences.md"
 
 _REMEMBER_RE = re.compile(r"^\s*remember\s*:\s*(.+)$", re.IGNORECASE | re.DOTALL)
@@ -29,8 +31,15 @@ def append_preference(text: str) -> None:
 
 
 def build_system_prompt(preferences: str) -> str:
-    """Empty when no Preferences are set — never send an empty system prompt."""
-    return f"{_SYSTEM_PROMPT_HEADER}{preferences}" if preferences else ""
+    """The FPL domain briefing, plus the user's Preferences when they have any.
+
+    The briefing comes first and is byte-identical every call, so the whole
+    system prompt stays cacheable up to the point where the (rarely changing)
+    Preferences begin. Never empty now -- an unset preferences.md drops the
+    Preferences section, not the rules of the game."""
+    if not preferences:
+        return FPL_DOMAIN_BRIEFING
+    return FPL_DOMAIN_BRIEFING + "\n" + _SYSTEM_PROMPT_HEADER + preferences
 
 
 def extract_remember_instruction(question: str) -> str | None:

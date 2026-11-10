@@ -6,9 +6,34 @@ import httpx
 DEFAULT_BASE_URL = "https://api.x.ai"
 _MODEL = "grok-4"
 
-# Splits the response's markdown output_text into per-bullet chunks so each
-# citation (one per cited post) can be paired with the paraphrase around it.
-_BULLET_SPLIT = re.compile(r"\n(?=- )")
+# Splits the response's markdown output_text into per-POST items so each
+# citation can be paired with the paraphrase around it.
+#
+# Issue 30: this used to be `\n(?=- )` -- bullets only. Grok returns a NUMBERED
+# list ("1. **Post URL**: ..."), so the regex matched nothing, the fallback
+# returned a single item spanning the whole response, and every cited URL was
+# paired with the entire blob. One Grok response became up to 51 content rows
+# holding identical text, each stance attributed to whichever URL happened to
+# seed its row -- the wrong-citation failure ADR-0014 exists to prevent.
+# Measured on live data before the fix: 295 chunks, 62 distinct texts.
+_ITEM_SPLIT = re.compile(r"\n(?=\s*(?:[-*]\s|\d+[.)]\s))")
+
+# A response that found nothing is not content. Grok says so in prose and
+# still attaches citations to the accounts it searched, so "has annotations"
+# is not enough to tell a result from a non-result.
+_NO_RESULTS = re.compile(
+    r"^\s*\**\s*(no matching posts|no relevant posts|no results|"
+    r"i (?:was unable to|could not|couldn't) find)",
+    re.IGNORECASE,
+)
+
+# Leading "1. " / "- " on a list item.
+_ENUMERATOR = re.compile(r"^\s*(?:\d+[.)]|[-*])\s*")
+# A "**Post URL**: https://..." header line -- metadata, not anything the
+# creator said.
+_URL_HEADER = re.compile(r"^\s*\**\s*(?:post\s*)?url\s*\**\s*:", re.IGNORECASE)
+# The "**Paraphrase**:" label in front of the text we actually want.
+_PARAPHRASE_LABEL = re.compile(r"^\s*\**\s*paraphrase\s*\**\s*:\s*", re.IGNORECASE)
 
 
 class GrokClient:
@@ -17,7 +42,7 @@ class GrokClient:
 
     Takes an httpx.Client so tests can fake it at its HTTP boundary
     (httpx.MockTransport with canned JSON) rather than mocking this class,
-    same convention as FPLClient/UnderstatClient.
+    same convention as FPLClient.
 
     Confirmed against a real call (2026-08-18): the tool does NOT return
     verbatim post text. It returns Grok's own synthesized paraphrase of each
@@ -72,38 +97,60 @@ def _parse_posts(payload: dict) -> list[dict]:
     for content in message.get("content", []):
         text = content.get("text", "")
         annotations = [a for a in content.get("annotations", []) if a.get("type") == "url_citation"]
-        if not annotations:
+        if not annotations or _NO_RESULTS.match(text):
             continue
 
-        bullets = _bullets_by_offset(text)
+        items = _items_by_offset(text)
+        if items is None:
+            # Issue 30: the structure was not recognised. Emit ONE row for the
+            # whole response rather than one per cited URL. Attributing the
+            # entire blob to every URL is how 51 identical rows were created,
+            # and a citation pointing at a post the claim did not come from is
+            # worse than a coarse one -- it looks checkable and is wrong.
+            first = annotations[0]["url"]
+            if first not in seen_urls:
+                posts.append({"url": first, "text": _clean(text)})
+                seen_urls.add(first)
+            continue
+
         for annotation in annotations:
             url = annotation["url"]
             if url in seen_urls:
                 continue
-            bullet = _bullet_containing(bullets, annotation["start_index"])
-            snippet = _clean(bullet) if bullet is not None else _clean(text)
-            posts.append({"url": url, "text": snippet})
+            item = _item_containing(items, annotation["start_index"])
+            if item is None:
+                # A citation in the preamble rather than in any post item.
+                # Dropped: there is no paraphrase to attach it to, and reaching
+                # for the whole text is exactly the bug being fixed.
+                continue
+            posts.append({"url": url, "text": _clean(item)})
             seen_urls.add(url)
     return posts
 
 
-def _bullets_by_offset(text: str) -> list[tuple[int, int, str]]:
-    """Returns (start, end, bullet_text) for each top-level "- " bullet."""
-    starts = [m.start() for m in _BULLET_SPLIT.finditer("\n" + text)]
+def _items_by_offset(text: str) -> list[tuple[int, int, str]] | None:
+    """(start, end, item_text) per list item, or None when the response has no
+    list structure at all.
+
+    None rather than "one item covering everything": the caller has to be able
+    to tell "this is one post" from "I could not find the posts", because those
+    want opposite behaviour and conflating them is issue 30.
+    """
+    starts = [m.start() for m in _ITEM_SPLIT.finditer("\n" + text)]
     if not starts:
-        return [(0, len(text), text)]
-    bullets = []
+        return None
+    items = []
     for i, start in enumerate(starts):
         end = starts[i + 1] if i + 1 < len(starts) else len(text) + 1
-        # +1 offsets for the leading "\n" prepended above.
-        bullets.append((start - 1, end - 1, text[max(start - 1, 0):end - 1]))
-    return bullets
+        # -1 offsets for the leading "\n" prepended above.
+        items.append((start - 1, end - 1, text[max(start - 1, 0):end - 1]))
+    return items
 
 
-def _bullet_containing(bullets: list[tuple[int, int, str]], offset: int) -> str | None:
-    for start, end, bullet_text in bullets:
+def _item_containing(items: list[tuple[int, int, str]], offset: int) -> str | None:
+    for start, end, item_text in items:
         if start <= offset < end:
-            return bullet_text
+            return item_text
     return None
 
 
@@ -111,12 +158,29 @@ _TRAILING_CITATION = re.compile(r"\[\[\d+\]\]\([^)]*\)\s*$")
 
 
 def _clean(snippet: str) -> str:
-    snippet = _TRAILING_CITATION.sub("", snippet).strip(" \n-*")
-    # Bullets are formatted "**<url>** (<date>)\n  <paraphrase>" -- drop that
-    # header line once the trailing citation link is gone, keeping just the
-    # paraphrase itself.
-    if "\n" in snippet:
+    """One post item reduced to what the creator was actually paraphrased as
+    saying -- no enumerator, no URL header, no citation markup.
+
+    Handles both shapes Grok has been observed to return:
+
+        - **<url>** (<date>)
+          <paraphrase>
+
+        1. **Post URL**: <url>
+           **Paraphrase**: <paraphrase>
+    """
+    snippet = _TRAILING_CITATION.sub("", snippet)
+    snippet = _ENUMERATOR.sub("", snippet, count=1).strip(" \n-*")
+
+    # Drop leading metadata lines: a bare url, or a "Post URL:" header. Looped
+    # because the numbered shape puts the enumerator and the header on the same
+    # line, leaving the paraphrase on the next one.
+    while "\n" in snippet:
         header, rest = snippet.split("\n", 1)
-        if header.strip().startswith("http"):
+        stripped = header.strip(" \n-*")
+        if stripped.startswith("http") or _URL_HEADER.match(header):
             snippet = rest.strip(" \n-*")
-    return snippet
+            continue
+        break
+
+    return _PARAPHRASE_LABEL.sub("", snippet).strip(" \n-*")

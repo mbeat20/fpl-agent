@@ -14,6 +14,21 @@ TEST_HANDLE = "recommend_transfers_test_creator"
 
 FUTURE = datetime.now(timezone.utc) + timedelta(days=7)
 
+# Issue 18: these tools now resolve a planning gameweek to label staleness
+# against, so they take a team id. Deliberately NOT MY_TEAM_ID -- nothing here
+# should touch the real team's row. Also not 90218, which test_stance_recency
+# owns: issue 22 gives this module a real teams row, and two files creating
+# and deleting the same team id is the kind of order coupling that has already
+# bitten this suite twice.
+TEST_TEAM_ID = 90223
+
+# Issue 22: recommend_transfers now refuses an illegal move before computing
+# anything, so these tests need a move that is actually legal -- "Out Player"
+# has to be IN the squad and "In Player" has to be the same position and
+# affordable. Both were previously absent and mismatched (a MID out for a FWD
+# in), which is precisely the move the ticket exists to stop.
+BANK = 3.0
+
 
 def _conn():
     return psycopg.connect(os.environ["DATABASE_URL"], row_factory=dict_row)
@@ -22,9 +37,23 @@ def _conn():
 @pytest.fixture
 def two_players():
     with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
+        conn.execute("DELETE FROM teams WHERE id = %s", (TEST_TEAM_ID,))
+        conn.execute(
+            "INSERT INTO teams (id, name, bank, team_value) VALUES (%s, %s, %s, %s)",
+            (TEST_TEAM_ID, "Recommend Transfers Test", BANK, 9.0),
+        )
         with conn.cursor() as cur:
             cur.execute("DELETE FROM fpl_players WHERE id = ANY(%s)", (list(TEST_IDS),))
             cur.execute("DELETE FROM fixtures WHERE id = %s", (TEST_FIXTURE_ID,))
+            # The squad half of the move. One player, not fifteen -- the
+            # composition rule is skipped for a squad that is not a full 15,
+            # deliberately, so a partial fixture like this measures the rules
+            # it is actually about.
+            cur.execute(
+                "INSERT INTO players (team_id, name, position, club, price) "
+                "VALUES (%s, %s, %s, %s, %s)",
+                (TEST_TEAM_ID, "Out Player", "MID", TEST_CLUBS[0], 6.0),
+            )
             cur.executemany(
                 "INSERT INTO fpl_players "
                 "(id, name, full_name, position, club, price, ownership, form, status, "
@@ -35,8 +64,11 @@ def two_players():
                         TEST_IDS[0], "Out Player", "Out Player Full", "MID", TEST_CLUBS[0],
                         6.0, 10.0, 3.0, "a", None, 2.0, 1.0,
                     ),
+                    # MID, matching Out Player: FPL transfers are like-for-like
+                    # by position and issue 22's validator now enforces it.
+                    # 8.0 against a 6.0 sale plus a 3.0 bank is affordable.
                     (
-                        TEST_IDS[1], "In Player", "In Player Full", "FWD", TEST_CLUBS[1],
+                        TEST_IDS[1], "In Player", "In Player Full", "MID", TEST_CLUBS[1],
                         8.0, 20.0, 4.0, "a", None, 5.0, 2.0,
                     ),
                 ],
@@ -52,11 +84,13 @@ def two_players():
     with psycopg.connect(os.environ["DATABASE_URL"]) as conn:
         conn.execute("DELETE FROM fpl_players WHERE id = ANY(%s)", (list(TEST_IDS),))
         conn.execute("DELETE FROM fixtures WHERE id = %s", (TEST_FIXTURE_ID,))
+        # Cascades the players row.
+        conn.execute("DELETE FROM teams WHERE id = %s", (TEST_TEAM_ID,))
 
 
 def test_gain_signal_and_net_gain_after_a_hit(two_players):
     with _conn() as conn:
-        comparison = recommend_transfers(conn, "Out Player", "In Player", is_hit=True)
+        comparison = recommend_transfers(conn, "Out Player", "In Player", is_hit=True, team_id=TEST_TEAM_ID)
 
     # out signal = 2.0 + 1.0 + 3.0 = 6.0; in signal = 5.0 + 2.0 + 4.0 = 11.0
     assert comparison.gain_signal == pytest.approx(5.0)
@@ -67,7 +101,7 @@ def test_gain_signal_and_net_gain_after_a_hit(two_players):
 
 def test_hit_cost_is_zero_when_not_a_hit(two_players):
     with _conn() as conn:
-        comparison = recommend_transfers(conn, "Out Player", "In Player", is_hit=False)
+        comparison = recommend_transfers(conn, "Out Player", "In Player", is_hit=False, team_id=TEST_TEAM_ID)
 
     assert comparison.hit_cost == 0
     assert comparison.net_gain_signal == comparison.gain_signal
@@ -78,7 +112,7 @@ def test_data_complete_is_false_when_a_player_is_missing_stats(two_players):
         conn.execute("UPDATE fpl_players SET xg = NULL WHERE id = %s", (TEST_IDS[1],))
 
     with _conn() as conn:
-        comparison = recommend_transfers(conn, "Out Player", "In Player", is_hit=False)
+        comparison = recommend_transfers(conn, "Out Player", "In Player", is_hit=False, team_id=TEST_TEAM_ID)
 
     assert comparison.data_complete is False
 
@@ -88,7 +122,7 @@ def test_injury_risk_is_flagged_per_player(two_players):
         conn.execute("UPDATE fpl_players SET status = 'i' WHERE id = %s", (TEST_IDS[0],))
 
     with _conn() as conn:
-        comparison = recommend_transfers(conn, "Out Player", "In Player", is_hit=False)
+        comparison = recommend_transfers(conn, "Out Player", "In Player", is_hit=False, team_id=TEST_TEAM_ID)
 
     assert comparison.player_out.injury_risk is True
     assert comparison.player_in.injury_risk is False
@@ -96,7 +130,7 @@ def test_injury_risk_is_flagged_per_player(two_players):
 
 def test_next_fixture_is_resolved_per_player(two_players):
     with _conn() as conn:
-        comparison = recommend_transfers(conn, "Out Player", "In Player", is_hit=False)
+        comparison = recommend_transfers(conn, "Out Player", "In Player", is_hit=False, team_id=TEST_TEAM_ID)
 
     assert comparison.player_out.next_opponent == TEST_CLUBS[1]
     assert comparison.player_out.next_fixture_difficulty == 3
@@ -135,7 +169,7 @@ def creator_stance_for_out_player(two_players):
 
 def test_creator_opinions_are_included_per_player(creator_stance_for_out_player):
     with _conn() as conn:
-        comparison = recommend_transfers(conn, "Out Player", "In Player", is_hit=False)
+        comparison = recommend_transfers(conn, "Out Player", "In Player", is_hit=False, team_id=TEST_TEAM_ID)
 
     assert len(comparison.player_out.creator_stances) == 1
     assert comparison.player_out.creator_stances[0].stance == "sell"
@@ -144,7 +178,7 @@ def test_creator_opinions_are_included_per_player(creator_stance_for_out_player)
 
 def test_make_recommend_transfers_tool_handler_is_wired(two_players):
     with _conn() as conn:
-        tool = make_recommend_transfers_tool(conn)
+        tool = make_recommend_transfers_tool(conn, TEST_TEAM_ID)
         comparison = tool.handler(player_out_name="Out Player", player_in_name="In Player", is_hit=True)
 
     assert comparison.player_out.player.name == "Out Player"

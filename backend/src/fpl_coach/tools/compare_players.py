@@ -18,7 +18,8 @@ def make_compare_players_tool(conn: Connection) -> ToolSpec:
         description=(
             "Side-by-side comparison of two or more FPL players (any player, not "
             "just the user's squad) — price, ownership %, form, injury status, and "
-            "Understat xG/xA for each. Unmatched names are silently skipped."
+            "season-to-date xG/xA (FPL's official Opta figures) for each. "
+            "Unmatched names are silently skipped."
         ),
         input_schema={
             "type": "object",

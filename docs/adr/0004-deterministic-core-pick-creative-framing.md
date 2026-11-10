@@ -1,0 +1,3 @@
+# Recommendation's core pick is deterministic; creativity lives only in framing
+
+Open question from the plan: should Recommendations be deterministic or allow controlled creativity? We're splitting it — the primary pick (who to captain, whether to transfer) is deterministic: identical inputs always produce the identical pick, low/zero temperature. Creativity (temperature, varied phrasing, which differential gets surfaced as an alternative) is confined to the alternatives and explanation around that pick, never to the pick itself. This keeps the Evaluation section's Captain/Transfer Accuracy tracking meaningful — a wrong call is attributable to reasoning, not sampling variance — while still allowing some variety in how alternatives and risks are framed.

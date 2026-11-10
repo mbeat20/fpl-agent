@@ -13,7 +13,7 @@ class VoyageClient:
 
     Takes an httpx.Client so tests can fake it at its HTTP boundary
     (httpx.MockTransport with canned JSON), same convention as
-    GrokClient/FPLClient/UnderstatClient.
+    GrokClient/FPLClient.
     """
 
     def __init__(self, http_client: httpx.Client | None = None, api_key: str | None = None) -> None:

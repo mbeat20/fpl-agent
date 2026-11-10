@@ -1,0 +1,3 @@
+# Supabase used as Postgres+pgvector only — no Auth, Storage, or Realtime
+
+The original plan picked Supabase for its full feature set (Postgres, Auth, Storage, pgvector, Realtime, easy deploy). For a single-user tool, only Postgres+pgvector is actually needed — Auth/Storage/Realtime would be unused surface area. Supabase stays the host (it's just managed Postgres with pgvector built in, so there's no migration cost from the original plan), but the app should only ever touch the database connection, not the Supabase client SDK or its other services. Noted explicitly so a later session doesn't reach for Supabase Auth or Realtime just because they're sitting there in the same dashboard.

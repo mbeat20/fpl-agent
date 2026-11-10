@@ -4,6 +4,7 @@ import psycopg
 import pytest
 from psycopg.rows import dict_row
 
+from fpl_coach.fixtures import upcoming_gameweek
 from fpl_coach.instincts import current_gameweek, is_instinct, log_instinct
 
 TEST_TEAM_ID = 9002
@@ -39,10 +40,42 @@ def test_current_gameweek_is_none_before_ingestion_has_run():
         assert current_gameweek(conn, TEST_TEAM_ID) is None
 
 
-def test_log_instinct_raises_without_a_known_gameweek():
+def test_log_instinct_falls_back_to_the_fixture_derived_gameweek():
+    """Issue 18: log_instinct moved from current_gameweek (gameweek_state
+    alone) to planning_gameweek, which also reads fixtures. A team that has
+    never been ingested therefore no longer hard-fails whenever the calendar
+    can still say which deadline is next -- refusing to record the user's own
+    note over a missing ingestion row helped nobody. It still raises when
+    NEITHER source knows.
+
+    Both branches are asserted against what planning_gameweek actually
+    resolves to, because `fixtures` is global and run_ingestion replaces it
+    wholesale -- so whether the fallback has anything to work with depends on
+    what else has run in this session. Pinning it to one branch made it pass
+    or fail on test ORDER."""
     with psycopg.connect(os.environ["DATABASE_URL"], row_factory=dict_row) as conn:
-        with pytest.raises(ValueError, match="gameweek"):
-            log_instinct(conn, TEST_TEAM_ID, "thinking Rogers to Enzo")
+        conn.execute(
+            "INSERT INTO teams (id, name) VALUES (%s, %s) ON CONFLICT (id) DO NOTHING",
+            (TEST_TEAM_ID, "Instinct Fallback Team"),
+        )
+        conn.commit()
+        expected = upcoming_gameweek(conn)
+        try:
+            if expected is None:
+                with pytest.raises(ValueError, match="gameweek"):
+                    log_instinct(conn, TEST_TEAM_ID, "thinking Rogers to Enzo")
+            else:
+                log_instinct(conn, TEST_TEAM_ID, "thinking Rogers to Enzo")
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT gameweek FROM instincts WHERE team_id = %s", (TEST_TEAM_ID,)
+                    )
+                    row = cur.fetchone()
+                assert row is not None
+                assert row["gameweek"] == expected
+        finally:
+            conn.execute("DELETE FROM teams WHERE id = %s", (TEST_TEAM_ID,))
+            conn.commit()
 
 
 def test_log_instinct_writes_a_row_tagged_to_the_current_gameweek(team_with_gameweek):

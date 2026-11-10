@@ -8,6 +8,12 @@ from fpl_coach.tools.get_creator_opinions import get_creator_opinions, make_get_
 
 TEST_HANDLES = ("opinions_high", "opinions_low")
 
+# Issue 18: get_creator_opinions resolves a planning gameweek to label
+# staleness against, so it now needs a team id. Deliberately NOT MY_TEAM_ID --
+# these tests must never touch the real team's row (conftest's seeded_team
+# already does that, and cascade-wipes real state when it does).
+TEST_TEAM_ID = 90218
+
 
 def _conn():
     return psycopg.connect(os.environ["DATABASE_URL"], row_factory=dict_row)
@@ -71,15 +77,18 @@ def seeded_opinions():
 
 def test_returns_stances_from_every_creator_who_has_one(seeded_opinions):
     with _conn() as conn:
-        opinions = get_creator_opinions(conn, "Ollie Watkins")
+        opinions = get_creator_opinions(conn, "Ollie Watkins", TEST_TEAM_ID)
 
     creator_names = {s.creator_name for s in opinions.stances}
     assert creator_names == {"High Trust Creator", "Low Trust Creator"}
 
 
 def test_stances_are_sorted_with_higher_trust_tier_first(seeded_opinions):
+    """Issue 18: both stances here are undated, so recency decay is identical
+    and the trust tier is the only thing left to order them -- which is
+    exactly the tier having an observable effect (AC 6)."""
     with _conn() as conn:
-        opinions = get_creator_opinions(conn, "Ollie Watkins")
+        opinions = get_creator_opinions(conn, "Ollie Watkins", TEST_TEAM_ID)
 
     assert [s.trust_tier for s in opinions.stances] == ["high", "low"]
     assert opinions.stances[0].creator_name == "High Trust Creator"
@@ -88,21 +97,21 @@ def test_stances_are_sorted_with_higher_trust_tier_first(seeded_opinions):
 
 def test_partial_name_match_finds_the_player(seeded_opinions):
     with _conn() as conn:
-        opinions = get_creator_opinions(conn, "Watkins")
+        opinions = get_creator_opinions(conn, "Watkins", TEST_TEAM_ID)
 
     assert len(opinions.stances) == 2
 
 
 def test_a_player_with_no_stances_returns_an_empty_list(seeded_opinions):
     with _conn() as conn:
-        opinions = get_creator_opinions(conn, "Some Player Nobody Has Discussed")
+        opinions = get_creator_opinions(conn, "Some Player Nobody Has Discussed", TEST_TEAM_ID)
 
     assert opinions.stances == []
 
 
 def test_make_get_creator_opinions_tool_handler_returns_the_view(seeded_opinions):
     with _conn() as conn:
-        tool = make_get_creator_opinions_tool(conn)
+        tool = make_get_creator_opinions_tool(conn, TEST_TEAM_ID)
         opinions = tool.handler(player_name="Watkins")
 
     assert len(opinions.stances) == 2

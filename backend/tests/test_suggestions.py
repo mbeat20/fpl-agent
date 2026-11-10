@@ -6,6 +6,7 @@ from psycopg.rows import dict_row
 
 from fpl_coach.models import (
     Alternative,
+    Evidence,
     PlanStep,
     Recommendation,
     RecommendationPick,
@@ -32,9 +33,10 @@ def team():
 
 def _recommendation() -> Recommendation:
     return Recommendation(
+        decision="captain",
         pick=RecommendationPick(player_id=1, player_name="Salah"),
         confidence=0.8,
-        evidence=["good fixture"],
+        evidence=[Evidence(text="good fixture")],
         risks=["rotation"],
         alternative=Alternative(player_id=2, player_name="Haaland", reason="also good"),
     )
@@ -47,14 +49,16 @@ def _plan() -> TransferPlan:
         steps=[
             PlanStep(
                 gameweek=1,
+                decision="transfer",
                 pick=RecommendationPick(player_id=1, player_name="Salah"),
-                evidence=["e"],
+                evidence=[Evidence(text="e")],
                 risks=["r"],
             ),
             PlanStep(
                 gameweek=2,
+                decision="transfer",
                 pick=RecommendationPick(player_id=2, player_name="Haaland"),
-                evidence=["e2"],
+                evidence=[Evidence(text="e2")],
                 risks=["r2"],
             ),
         ],

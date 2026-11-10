@@ -29,6 +29,11 @@ class _FakeVoyageClient:
     def embed(self, texts: list[str]) -> list[list[float]]:
         return [self._query_vector for _ in texts]
 
+# Issue 18: these tools now resolve a planning gameweek to label staleness
+# against, so they take a team id. Deliberately NOT MY_TEAM_ID -- nothing here
+# should touch the real team's row.
+TEST_TEAM_ID = 90218
+
 
 def _conn():
     return psycopg.connect(os.environ["DATABASE_URL"], row_factory=dict_row)
@@ -102,7 +107,10 @@ def test_nearest_chunk_ranks_first(seeded_creator_with_stances):
     similarity, not insertion order or trust tier."""
     with _conn() as conn:
         result = search_creator_opinions(
-            conn, _FakeVoyageClient(_unit_vector(0)), "anything, query text doesn't matter here"
+            conn,
+            _FakeVoyageClient(_unit_vector(0)),
+            "anything, query text doesn't matter here",
+            TEST_TEAM_ID,
         )
 
     assert len(result.matches) >= 1
@@ -118,7 +126,7 @@ def test_a_query_with_no_exact_player_name_still_returns_a_relevant_stance(
     axis 1's vector was seeded against Newcastle's fixture-run content."""
     with _conn() as conn:
         result = search_creator_opinions(
-            conn, _FakeVoyageClient(_unit_vector(1)), "Newcastle's fixture run"
+            conn, _FakeVoyageClient(_unit_vector(1)), "Newcastle's fixture run", TEST_TEAM_ID
         )
 
     assert len(result.matches) >= 1
@@ -133,7 +141,7 @@ def test_stanceless_content_is_never_surfaced(seeded_creator_with_stances):
     returned as bare unresolved text."""
     with _conn() as conn:
         result = search_creator_opinions(
-            conn, _FakeVoyageClient(_unit_vector(2)), "banter"
+            conn, _FakeVoyageClient(_unit_vector(2)), "banter", TEST_TEAM_ID
         )
 
     assert all(m.matched_text != "General banter." for m in result.matches)
@@ -141,7 +149,9 @@ def test_stanceless_content_is_never_surfaced(seeded_creator_with_stances):
 
 def test_tool_handler_is_wired_to_search_creator_opinions(seeded_creator_with_stances):
     with _conn() as conn:
-        tool = make_search_creator_opinions_tool(conn, _FakeVoyageClient(_unit_vector(0)))
+        tool = make_search_creator_opinions_tool(
+            conn, _FakeVoyageClient(_unit_vector(0)), TEST_TEAM_ID
+        )
         result = tool.handler(query="Salah fixtures")
 
     assert result.query == "Salah fixtures"

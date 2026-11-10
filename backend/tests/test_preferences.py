@@ -23,14 +23,24 @@ def test_append_preference_creates_file_and_load_reads_it_back(tmp_path, monkeyp
     )
 
 
-def test_build_system_prompt_is_empty_when_no_preferences():
-    assert build_system_prompt("") == ""
+def test_build_system_prompt_is_the_domain_briefing_when_no_preferences():
+    """No longer empty: the rules of the game are not optional, only the
+    user's Preferences section is. An empty system prompt used to leave the
+    reasoning layer with no statement of squad or transfer legality at all,
+    which is how illegal cross-position transfers reached the user."""
+    system = build_system_prompt("")
+
+    assert "like-for-like" in system
+    assert "2 GK, 5 DEF, 5 MID, 3 FWD" in system
 
 
 def test_build_system_prompt_includes_preferences_text():
     system = build_system_prompt("- Dislikes knee-jerk transfers")
 
     assert "Dislikes knee-jerk transfers" in system
+    # Briefing first, preferences after: the briefing is byte-identical on
+    # every call, so it stays inside the cacheable prefix of the prompt.
+    assert system.index("like-for-like") < system.index("Dislikes knee-jerk")
 
 
 def test_extract_remember_instruction_matches_prefix():

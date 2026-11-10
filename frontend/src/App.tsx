@@ -1,101 +1,75 @@
 import { useState } from 'react'
+import RefreshControl from './components/RefreshControl'
 import TickerHeader from './components/TickerHeader'
-import AskForm from './components/AskForm'
-import RecommendationCard from './components/RecommendationCard'
-import TransferPlanCard from './components/TransferPlanCard'
-import RememberNote from './components/RememberNote'
-import TeamDashboard from './components/TeamDashboard'
-import { isRememberAck, isTransferPlan, type AskResponse } from './types'
+import CoachPage from './pages/CoachPage'
+import DeadlinePage from './pages/DeadlinePage'
+import DiscoursePage from './pages/DiscoursePage'
+import PlanPage from './pages/PlanPage'
+import SquadPage from './pages/SquadPage'
+import Link from './components/Link'
+import { ROUTES, useRoute, type RoutePath } from './router'
 
-type View = 'ask' | 'team'
+/**
+ * The shell: navigation, the data-freshness control, and whichever page the
+ * URL names.
+ *
+ * This replaces a two-value `useState<View>`. The old Team tab was eight
+ * panels of unrelated purpose in one 640px column -- deadline triage, squad
+ * reference, plan tracking and creator discourse, all stacked, all loaded
+ * together -- and two of those panels were explicitly not about the user's
+ * team at all. Splitting them by the job they do is the point; the URL is what
+ * makes each one reloadable and linkable, which matters most on the page whose
+ * content is a countdown you refresh to watch.
+ *
+ * `dataVersion` keys the page. When an ingestion run finishes, the pages'
+ * fetches are stale, and a finished refresh that leaves the screen showing
+ * pre-refresh numbers is the one way the refresh control could be actively
+ * misleading -- the user would watch the data update and then read the old
+ * version of it.
+ */
+
+const PAGES: Record<RoutePath, { title: string; render: () => React.ReactNode }> = {
+  '/': { title: 'Deadline', render: () => <DeadlinePage /> },
+  '/squad': { title: 'My squad', render: () => <SquadPage /> },
+  '/coach': { title: 'Ask the coach', render: () => <CoachPage /> },
+  '/plan': { title: 'My plan', render: () => <PlanPage /> },
+  '/discourse': { title: 'The discourse', render: () => <DiscoursePage /> },
+}
 
 export default function App() {
-  const [view, setView] = useState<View>('ask')
-  const [question, setQuestion] = useState('')
-  const [response, setResponse] = useState<AskResponse | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  async function handleSubmit() {
-    if (!question.trim() || loading) return
-
-    setLoading(true)
-    setError(null)
-    setResponse(null)
-
-    try {
-      const res = await fetch('/api/recommendations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question }),
-      })
-      if (!res.ok) throw new Error(`Request failed: ${res.status}`)
-      const data: AskResponse = await res.json()
-      setResponse(data)
-    } catch {
-      setError("Couldn't reach the coach. Check the connection and try again.")
-    } finally {
-      setLoading(false)
-    }
-  }
+  const route = useRoute()
+  const [dataVersion, setDataVersion] = useState(0)
+  const page = PAGES[route]
 
   return (
     <>
       <TickerHeader />
-      <main className="main">
-        <div>
-          <span className="eyebrow">FPL Coach</span>
-          <h1>{view === 'ask' ? 'Ask the coach' : 'My team'}</h1>
-        </div>
+      {/* Wide for the boards, narrow for the conversation. Set on the shell
+          rather than inside each page so the header and the content share one
+          measure and the nav does not shift when you change pages. */}
+      <main className={`main ${route === '/coach' ? 'main-narrow' : 'main-wide'}`}>
+        <header className="app-head">
+          <div>
+            <span className="eyebrow">FPL Coach</span>
+            <h1>{page.title}</h1>
+          </div>
+          <RefreshControl onRefreshed={() => setDataVersion((v) => v + 1)} />
+        </header>
 
-        <div className="view-tabs" role="tablist">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={view === 'ask'}
-            className={`view-tab ${view === 'ask' ? 'active' : ''}`}
-            onClick={() => setView('ask')}
-          >
-            Ask
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={view === 'team'}
-            className={`view-tab ${view === 'team' ? 'active' : ''}`}
-            onClick={() => setView('team')}
-          >
-            My Team
-          </button>
-        </div>
+        <nav className="nav" aria-label="Sections">
+          {ROUTES.map((item) => (
+            <Link
+              key={item.path}
+              to={item.path}
+              className={`nav-item ${route === item.path ? 'active' : ''}`}
+              aria-current={route === item.path ? 'page' : undefined}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </nav>
 
-        {view === 'team' ? (
-          <TeamDashboard />
-        ) : (
-          <>
-            <AskForm
-              question={question}
-              onQuestionChange={setQuestion}
-              onSubmit={handleSubmit}
-              loading={loading}
-            />
-
-            {error && (
-              <div className="error-panel">
-                <span className="tag">Error</span>
-                {error}
-              </div>
-            )}
-
-            {response && isRememberAck(response) && <RememberNote text={response.remembered} />}
-            {response && !isRememberAck(response) && isTransferPlan(response) && (
-              <TransferPlanCard plan={response} />
-            )}
-            {response && !isRememberAck(response) && !isTransferPlan(response) && (
-              <RecommendationCard recommendation={response} />
-            )}
-          </>
-        )}
+        <div key={dataVersion}>{page.render()}</div>
       </main>
     </>
   )

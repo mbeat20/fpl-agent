@@ -5,9 +5,19 @@ interface AskFormProps {
   onQuestionChange: (value: string) => void
   onSubmit: () => void
   loading: boolean
+  // Issue 27: the prompt changes once an exchange is under way -- "ask the
+  // coach" invites a fresh question, which is the opposite of what a
+  // conversation wants at that point.
+  placeholder?: string
 }
 
-export default function AskForm({ question, onQuestionChange, onSubmit, loading }: AskFormProps) {
+export default function AskForm({
+  question,
+  onQuestionChange,
+  onSubmit,
+  loading,
+  placeholder,
+}: AskFormProps) {
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
     onSubmit()
@@ -21,7 +31,7 @@ export default function AskForm({ question, onQuestionChange, onSubmit, loading 
           type="text"
           value={question}
           onChange={(e) => onQuestionChange(e.target.value)}
-          placeholder="Who should I captain this week?"
+          placeholder={placeholder ?? 'Who should I captain this week?'}
           aria-label="Question for the coach"
         />
         <button type="submit" className="run-btn" disabled={loading || !question.trim()}>

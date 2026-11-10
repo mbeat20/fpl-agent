@@ -1,0 +1,3 @@
+# Vite + React SPA frontend, not Next.js
+
+Supersedes the framework choice in ADR-0007 (the separate-project call itself stands). The frontend is a Vite + React single-page app rather than Next.js. Next.js's core value — server rendering for SEO and first-paint performance on public pages — doesn't apply to a single-user, behind-auth chat tool; a Vite SPA is lighter weight for a client that purely calls the backend API (ADR-0008) and renders the result, with no routing conventions or server/client component boundary to work around. TypeScript stays the frontend's language, matching where the user is fastest, while the backend is Python (ADR-0008) where the AI/data ecosystem is stronger.

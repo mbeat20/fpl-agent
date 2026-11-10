@@ -24,3 +24,27 @@ def next_fixture_by_club(conn: Connection) -> dict[str, dict]:
     with conn.cursor() as cur:
         cur.execute(_NEXT_FIXTURE_SQL)
         return {row["club"]: row for row in cur.fetchall()}
+
+
+_UPCOMING_GAMEWEEK_SQL = """
+SELECT MIN(gameweek) AS gameweek FROM fixtures WHERE kickoff_time > now()
+"""
+
+
+def upcoming_gameweek(conn: Connection) -> int | None:
+    """The earliest gameweek that still has an unplayed fixture, derived from
+    wall-clock time rather than from gameweek_state.
+
+    A safety net for consumers that must not act on a finished gameweek.
+    gameweek_state only advances when ingestion runs (ADR-0002: no
+    scheduler), so between a gameweek ending and the next ingestion it names
+    a gameweek whose fixtures have all been played. Fixture kickoff times
+    are already in the database and need no API call to stay honest.
+
+    None when no fixture is scheduled ahead -- season over, or fixtures have
+    never been ingested.
+    """
+    with conn.cursor() as cur:
+        cur.execute(_UPCOMING_GAMEWEEK_SQL)
+        row = cur.fetchone()
+    return row["gameweek"] if row else None
